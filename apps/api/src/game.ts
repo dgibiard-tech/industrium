@@ -10,6 +10,8 @@ class BuyDto { @IsString() buyerCompanyId!:string; @IsInt() @IsPositive() quanti
 class JobDto { @IsString() @MinLength(2) title!:string; @IsString() city!:string; @IsInt() @IsPositive() salaryCents!:number }
 class CompanyActionDto { @IsString() companyId!:string }
 class BuyVehicleDto extends CompanyActionDto { @IsString() @IsIn(['atlas-tx480','voltis-e18','nova-v6']) modelId!:string }
+class BulkVehicleDto extends BuyVehicleDto { @IsInt() @Min(2) quantity!:number }
+class GarageSaleDto extends CompanyActionDto { @IsString() @IsIn(['NORD','EURO','ECO']) garageId!:'NORD'|'EURO'|'ECO' }
 class AssignShipmentDto extends CompanyActionDto { @IsString() vehicleId!:string }
 class ListVehicleDto extends CompanyActionDto { @IsInt() @IsPositive() askingPriceCents!:number }
 class EquipmentDto extends CompanyActionDto { @IsString() @IsIn(['ASSEMBLY_LINE','ELECTRONICS_LINE','WOODWORK_LINE','ROBOTICS','SOLAR_ARRAY']) kind!:string }
@@ -276,6 +278,26 @@ export class GameService {
       return vehicle;
     });
   }
+  async buyTruckBatch(userId:string,dto:BulkVehicleDto){
+    const selected=vehicleCatalog[dto.modelId as keyof typeof vehicleCatalog],quantity=Math.min(20,dto.quantity),discount=quantity>=10?12:quantity>=5?8:4;
+    const unitPrice=selected.price*BigInt(100-discount)/100n,total=unitPrice*BigInt(quantity);
+    return this.db.$transaction(async tx=>{
+      const company=await tx.company.findFirst({where:{id:dto.companyId,members:{some:{userId,role:{in:['OWNER','MANAGER']}}}},include:{account:true}});if(!company?.account)throw new NotFoundException('Entreprise inaccessible');
+      const paid=await tx.bankAccount.updateMany({where:{id:company.account.id,balanceCents:{gte:total}},data:{balanceCents:{decrement:total},version:{increment:1}}});if(!paid.count)throw new BadRequestException('Trésorerie insuffisante pour ce lot');
+      const stamp=Date.now().toString().slice(-6);for(let index=0;index<quantity;index++)await tx.vehicle.create({data:{companyId:company.id,registration:`${selected.prefix}-${stamp}-${String(index+1).padStart(2,'0')}`,model:selected.model,type:selected.type,capacityKg:selected.capacityKg,purchasePriceCents:unitPrice}});
+      await tx.ledgerTransaction.create({data:{accountId:company.account.id,type:'PURCHASE',amountCents:-total,description:`Achat groupé ${quantity} × ${selected.model} · remise ${discount}%`}});return {quantity,discount,total};
+    });
+  }
+  async sellVehicleToGarage(userId:string,vehicleId:string,dto:GarageSaleDto){
+    const garageRates={NORD:78,EURO:82,ECO:86} as const,garageNames={NORD:'Garage Nord Trucks',EURO:'EuroFleet Occasion',ECO:'EcoMotion Reprise'} as const;
+    return this.db.$transaction(async tx=>{
+      const vehicle=await tx.vehicle.findFirst({where:{id:vehicleId,companyId:dto.companyId,status:'AVAILABLE',company:{members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}},include:{company:{include:{account:true}}}});if(!vehicle?.company.account)throw new BadRequestException('Le camion doit être revenu au garage');
+      const value=vehicleValue(vehicle.purchasePriceCents,vehicle.condition,Number(vehicle.mileageKm)),offer=value*BigInt(garageRates[dto.garageId])/100n;
+      const garage=await tx.company.upsert({where:{name:garageNames[dto.garageId]},update:{},create:{name:garageNames[dto.garageId],sector:'Garage professionnel',headquarters:'Europe',legalForm:'SA',account:{create:{balanceCents:10_000_000_000n}}}});
+      await tx.vehicleMarketListing.updateMany({where:{vehicleId,status:'ACTIVE'},data:{status:'CANCELLED'}});await tx.vehicle.update({where:{id:vehicleId},data:{companyId:garage.id}});await tx.bankAccount.update({where:{id:vehicle.company.account.id},data:{balanceCents:{increment:offer},version:{increment:1}}});
+      await tx.ledgerTransaction.create({data:{accountId:vehicle.company.account.id,type:'SALE',amountCents:offer,description:`Reprise garage ${vehicle.model}`,referenceId:vehicle.id}});return {offer};
+    });
+  }
   async assignShipment(userId:string,shipmentId:string,dto:AssignShipmentDto){
     return this.db.$transaction(async tx=>{
       const vehicle=await tx.vehicle.findFirst({where:{id:dto.vehicleId,companyId:dto.companyId,status:'AVAILABLE',company:{members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}}});
@@ -332,6 +354,8 @@ export class GameController {
   @Get('vehicles') vehicles(@Req() r:AuthRequest){return this.game.vehicles(r.user.sub)}
   @Get('vehicle-market') vehicleMarket(){return this.game.vehicleMarket()}
   @Post('vehicles/buy-truck') buyTruck(@Req() r:AuthRequest,@Body() d:BuyVehicleDto){return this.game.buyTruck(r.user.sub,d)}
+  @Post('vehicles/buy-batch') buyTruckBatch(@Req() r:AuthRequest,@Body() d:BulkVehicleDto){return this.game.buyTruckBatch(r.user.sub,d)}
+  @Post('vehicles/:id/garage-sale') garageSale(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:GarageSaleDto){return this.game.sellVehicleToGarage(r.user.sub,id,d)}
   @Post('vehicles/:id/list') listVehicle(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:ListVehicleDto){return this.game.listVehicle(r.user.sub,id,d)}
   @Post('vehicles/:id/maintenance') maintainVehicle(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.maintainVehicle(r.user.sub,id,d)}
   @Post('vehicle-market/:id/buy') buyUsedVehicle(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.buyUsedVehicle(r.user.sub,id,d)}

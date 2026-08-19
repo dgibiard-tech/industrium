@@ -340,6 +340,7 @@ function Game() {
   );
 }
 const gameUpdates=[
+  {title:"Garage professionnel et renouvellement de flotte",items:["Reprise immédiate de chaque camion disponible","Trois offres de garages selon le véhicule","Achat par lots de 2 à 20 camions","Remises automatiques jusqu’à 12 %"]},
   {title:"Refonte structurelle de la carte 3D",items:["Terrain continu sans contour rectangulaire artificiel","Routes courbes d’un seul tenant sans cassures","Rond-point réellement connecté et quatre accès régionaux","Accotements, marquages, glissières et relief détaillés"]},
   {title:"Centrale solaire industrielle",items:["Installation photovoltaïque achetable pour chaque usine","Production électrique en temps réel selon l’heure","Autoconsommation, économies mensuelles et CO₂ évité","Parc solaire agrandi automatiquement avec les niveaux"]},
   {title:"Usines évolutives sur 50 niveaux",items:["10 paliers industriels du petit atelier à la mégafactory autonome","Productivité et capacité progressives","Feuille de route complète avec avantages de chaque palier"]},
@@ -685,6 +686,8 @@ function Transport({
   const [selling, setSelling] = useState<string | null>(null);
   const [salePrice, setSalePrice] = useState("");
   const [historyVehicle, setHistoryVehicle] = useState("ALL");
+  const [batchModel, setBatchModel] = useState("atlas-tx480");
+  const [batchQuantity, setBatchQuantity] = useState(5);
   const network = useQuery({
     queryKey: ["fleet-network", company.id],
     queryFn: () =>
@@ -711,6 +714,8 @@ function Transport({
       }),
     onSuccess: refresh,
   });
+  const buyBatch = useMutation({mutationFn:()=>api("/vehicles/buy-batch",{method:"POST",body:JSON.stringify({companyId:company.id,modelId:batchModel,quantity:batchQuantity})}),onSuccess:refresh});
+  const garageSale = useMutation({mutationFn:({vehicleId,garageId}:{vehicleId:string;garageId:string})=>api(`/vehicles/${vehicleId}/garage-sale`,{method:"POST",body:JSON.stringify({companyId:company.id,garageId})}),onSuccess:refresh});
   const assign = useMutation({
     mutationFn: ({
       shipmentId,
@@ -857,6 +862,9 @@ function Transport({
     buyUsed.error ||
     maintain.error ||
     autoDispatch.error;
+  const batchVehicle=vehicleCatalog.find((vehicle)=>vehicle.id===batchModel)!;
+  const batchDiscount=batchQuantity>=10?12:batchQuantity>=5?8:4;
+  const batchTotal=batchVehicle.price*batchQuantity*(100-batchDiscount)/100;
   return (
     <section className="transportPage">
       <div className="fleetHeader">
@@ -947,6 +955,18 @@ function Transport({
           </article>
         ))}
       </div>
+      <section className="fleetGarage">
+        <div className="garageHero"><div><small>CENTRE DE RENOUVELLEMENT</small><h3>Garage professionnel Industrium</h3><p>Commandez une nouvelle flotte en lot et obtenez jusqu’à 12 % de remise immédiate.</p></div><span>OFFRES FLOTTE</span></div>
+        <div className="bulkPurchase">
+          <label>Modèle<select value={batchModel} onChange={(event)=>setBatchModel(event.target.value)}>{vehicleCatalog.map((vehicle)=><option value={vehicle.id} key={vehicle.id}>{vehicle.model}</option>)}</select></label>
+          <label>Quantité<input type="number" min="2" max="20" value={batchQuantity} onChange={(event)=>setBatchQuantity(Math.min(20,Math.max(2,Number(event.target.value))))}/></label>
+          <div><small>Prix catalogue</small><b>{money(batchVehicle.price*batchQuantity)}</b></div><div><small>Remise garage</small><b className="discount">− {batchDiscount} %</b></div><div><small>Total du lot</small><strong>{money(batchTotal)}</strong></div>
+          <button disabled={buyBatch.isPending} onClick={()=>buyBatch.mutate()}>{buyBatch.isPending?"Préparation…":`Acheter ${batchQuantity} camions`}</button>
+        </div>
+        <h4>Offres de reprise disponibles</h4>
+        <div className="garageOffers">{vehicles.map((vehicle)=>{
+          const value=Number(vehicle.currentValueCents);return <article key={vehicle.id}><img src={vehicleImage(vehicle.model)} alt={vehicle.model}/><div><small>{vehicle.registration}</small><b>{vehicle.model}</b><span>{Number(vehicle.mileageKm).toLocaleString("fr-FR")} km · état {vehicle.condition}%</span></div><div className="dealerQuotes"><button disabled={vehicle.status!=="AVAILABLE"||garageSale.isPending} onClick={()=>garageSale.mutate({vehicleId:vehicle.id,garageId:"NORD"})}><span>Nord Trucks</span><b>{money(value*.78)}</b></button><button disabled={vehicle.status!=="AVAILABLE"||garageSale.isPending} onClick={()=>garageSale.mutate({vehicleId:vehicle.id,garageId:"EURO"})}><span>EuroFleet</span><b>{money(value*.82)}</b></button><button disabled={vehicle.status!=="AVAILABLE"||garageSale.isPending} onClick={()=>garageSale.mutate({vehicleId:vehicle.id,garageId:"ECO"})}><span>EcoMotion</span><b>{money(value*.86)}</b></button></div>{vehicle.status!=="AVAILABLE"&&<em>Reprise disponible au retour de mission</em>}</article>})}</div>
+      </section>
       <div className="transportMetrics">
         <Card
           label="Véhicules"

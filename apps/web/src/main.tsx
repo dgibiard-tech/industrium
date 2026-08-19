@@ -10,4 +10,5 @@ import './order-enhanced.css';
 import './fleet-history.css';
 import './factory-levels.css';
 import './solar-system.css';
+import './fleet-garage.css';
 createRoot(document.getElementById('root')!).render(<React.StrictMode><QueryClientProvider client={new QueryClient()}><App/></QueryClientProvider></React.StrictMode>);

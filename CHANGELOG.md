@@ -2,6 +2,14 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Garage professionnel et renouvellement de flotte
+
+- Ajout de trois offres de reprise immédiate pour chaque camion disponible.
+- Conservation sécurisée des camions actuellement engagés dans une mission.
+- Achat groupé de 2 à 20 véhicules avec une seule commande.
+- Remises automatiques de 4 %, 8 % ou 12 % selon la taille du lot.
+- Transfert des véhicules repris aux garages avec versement immédiat à l'entreprise.
+
 ## 19 août 2026 — Refonte structurelle de la carte 3D
 
 - Remplacement du contour rectangulaire par un terrain continu de 230 × 190 unités.
