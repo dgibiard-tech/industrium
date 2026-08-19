@@ -340,6 +340,7 @@ function Game() {
   );
 }
 const gameUpdates=[
+  {title:"Centrale solaire industrielle",items:["Installation photovoltaïque achetable pour chaque usine","Production électrique en temps réel selon l’heure","Autoconsommation, économies mensuelles et CO₂ évité","Parc solaire agrandi automatiquement avec les niveaux"]},
   {title:"Usines évolutives sur 50 niveaux",items:["10 paliers industriels du petit atelier à la mégafactory autonome","Productivité et capacité progressives","Feuille de route complète avec avantages de chaque palier"]},
   {title:"Rentabilité logistique complète",items:["Coût par voyage : énergie, salarié et entretien","Prix du gazole au litre et consommation de chaque camion","Bénéfice net total et détaillé par véhicule","Inventaire des missions livrées et fret longue distance"]},
   {title:"Tour de contrôle des commandes",items:["Recherche, filtres et tri avancés","Indicateurs commerciaux et graphique des flux","Fiches détaillées avec facture, taxes et traçabilité"]},
@@ -1313,6 +1314,12 @@ const factoryEquipment = [
     price: 40_000_000,
     detail: "Cadence de toutes les lignes +50 %",
   },
+  {
+    kind: "SOLAR_ARRAY",
+    name: "Centrale photovoltaïque",
+    price: 18_500_000,
+    detail: "Panneaux solaires, onduleurs et autoconsommation du site",
+  },
 ] as const;
 const factoryRecipes = [
   {
@@ -1396,6 +1403,16 @@ function FactoryManagement({
   const nextTier = factoryTiers.find((tier) => tier.level > factory.level);
   const maxBatch = 100 + (factory.level - 1) * 20;
   const productionBonus = Math.round((Math.sqrt(factory.level) - 1) * 35);
+  const solarInstalled = factory.equipment.some((item) => item.kind === "SOLAR_ARRAY");
+  const solarPanels = solarInstalled ? 120 + factory.level * 40 : 0;
+  const solarCapacityKw = solarPanels * .45;
+  const solarHour = new Date(now).getHours() + new Date(now).getMinutes() / 60;
+  const sunlight = Math.max(0, Math.sin(((solarHour - 6) / 12) * Math.PI)) * .82;
+  const solarProductionKw = solarCapacityKw * sunlight;
+  const factoryDemandKw = 180 + factory.level * 35 + factory.equipment.length * 28;
+  const selfConsumption = solarInstalled ? Math.min(100, solarProductionKw / factoryDemandKw * 100) : 0;
+  const monthlySolarKwh = solarCapacityKw * 112;
+  const monthlySolarSavings = monthlySolarKwh * 21;
   return (
     <section className="factoryPage">
       <div className="factoryHero advancedFactoryHero" style={{"--tier-color":currentTier.color} as React.CSSProperties}>
@@ -1420,6 +1437,26 @@ function FactoryManagement({
         <header><div><small>PROGRESSION DU SITE</small><h3>Niveau {factory.level} sur 50</h3></div><div><b>{currentTier.name}</b>{nextTier && <em>Prochain palier : {nextTier.name} · niveau {nextTier.level}</em>}</div></header>
         <div className="factoryLevelTrack"><i style={{width:`${factory.level/50*100}%`}} /></div>
         <div className="factoryRoadmap">{factoryTiers.map((tier)=><article key={tier.level} className={factory.level>=tier.level?"unlocked":"locked"}><span style={{background:tier.color}}>{tier.level}</span><div><small>NIVEAU {tier.level}</small><b>{tier.name}</b><em>{tier.benefit}</em></div><strong>{factory.level>=tier.level?"DÉBLOQUÉ":"VERROUILLÉ"}</strong></article>)}</div>
+      </section>
+      <section className={`solarPlant ${solarInstalled ? "online" : "offline"}`}>
+        <div className="solarVisual">
+          <div className="sunCore"><i /></div>
+          <div className="panelField">{Array.from({length:18},(_,index)=><span key={index}><i/><i/><i/></span>)}</div>
+          <div className="solarFlow"><i style={{width:`${Math.min(100,selfConsumption)}%`}} /></div>
+        </div>
+        <div className="solarControl">
+          <small>ÉNERGIE · PHOTOVOLTAÏQUE</small><h3>Centrale solaire de {factory.name}</h3>
+          <div className="solarStatus"><i />{solarInstalled ? "PRODUCTION CONNECTÉE" : "INSTALLATION REQUISE"}</div>
+          <div className="solarKpis">
+            <article><span>Puissance installée</span><b>{solarCapacityKw.toLocaleString("fr-FR",{maximumFractionDigits:0})} kWc</b><em>{solarPanels.toLocaleString("fr-FR")} panneaux</em></article>
+            <article><span>Production actuelle</span><b>{solarProductionKw.toLocaleString("fr-FR",{maximumFractionDigits:1})} kW</b><em>ensoleillement {Math.round(sunlight*100)} %</em></article>
+            <article><span>Autoconsommation</span><b>{selfConsumption.toLocaleString("fr-FR",{maximumFractionDigits:0})} %</b><em>besoin usine {factoryDemandKw} kW</em></article>
+            <article><span>Économies mensuelles</span><b>{money(monthlySolarSavings)}</b><em>{monthlySolarKwh.toLocaleString("fr-FR",{maximumFractionDigits:0})} kWh produits</em></article>
+            <article><span>CO₂ évité</span><b>{(monthlySolarKwh*.055/1000).toLocaleString("fr-FR",{maximumFractionDigits:1})} t</b><em>par mois</em></article>
+          </div>
+          {!solarInstalled && <button disabled={equipment.isPending} onClick={()=>equipment.mutate("SOLAR_ARRAY")}>Installer la centrale · {money(18_500_000)}</button>}
+          {solarInstalled && <p>Le parc gagne automatiquement 40 panneaux à chaque niveau d’usine.</p>}
+        </div>
       </section>
       {error && <p className="error">{error.message}</p>}
       <div className="factoryMetrics">

@@ -2,6 +2,14 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Centrale solaire industrielle
+
+- Ajout d'une centrale photovoltaïque achetable dans le catalogue d'équipements.
+- Simulation en temps réel de la production selon l'heure et l'ensoleillement.
+- Affichage de la puissance, du nombre de panneaux et du taux d'autoconsommation.
+- Calcul des économies mensuelles, de l'énergie produite et du CO₂ évité.
+- Ajout automatique de 40 panneaux à chaque niveau supplémentaire de l'usine.
+
 ## 19 août 2026 — Usines évolutives sur 50 niveaux
 
 - Extension des usines jusqu'au niveau 50.

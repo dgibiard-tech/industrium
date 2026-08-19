@@ -12,7 +12,7 @@ class CompanyActionDto { @IsString() companyId!:string }
 class BuyVehicleDto extends CompanyActionDto { @IsString() @IsIn(['atlas-tx480','voltis-e18','nova-v6']) modelId!:string }
 class AssignShipmentDto extends CompanyActionDto { @IsString() vehicleId!:string }
 class ListVehicleDto extends CompanyActionDto { @IsInt() @IsPositive() askingPriceCents!:number }
-class EquipmentDto extends CompanyActionDto { @IsString() @IsIn(['ASSEMBLY_LINE','ELECTRONICS_LINE','WOODWORK_LINE','ROBOTICS']) kind!:string }
+class EquipmentDto extends CompanyActionDto { @IsString() @IsIn(['ASSEMBLY_LINE','ELECTRONICS_LINE','WOODWORK_LINE','ROBOTICS','SOLAR_ARRAY']) kind!:string }
 class ProductionDto extends CompanyActionDto { @IsString() @IsIn(['VEHICLE','COMPUTER','FURNITURE']) productType!:'VEHICLE'|'COMPUTER'|'FURNITURE'; @IsInt() @Min(1) quantity!:number }
 class ProposalDto { @IsString() buyerCompanyId!:string; @IsInt() @IsPositive() quantity!:number; @IsInt() @IsPositive() proposedUnitPriceCents!:number }
 class AutoDispatchDto extends CompanyActionDto { @IsInt() @Min(1) maxTransports!:number }
@@ -33,7 +33,7 @@ const cityCountries:Record<string,{country:string;code:string}>={Paris:{country:
 const originForCity=(city:string)=>cityCountries[city]??{country:'Europe',code:'EU'};
 const shipmentDurationMs=(distanceKm:number)=>Math.min(30,Math.max(2,Math.ceil(distanceKm/100)))*60_000;
 const vehicleValue=(purchasePriceCents:bigint,condition:number,mileageKm:number)=>purchasePriceCents*BigInt(Math.max(3000,condition*100-Math.min(5000,Math.floor(mileageKm/50))))/10_000n;
-const equipmentCatalog={ASSEMBLY_LINE:{name:'Ligne d’assemblage automobile',price:50_000_000n},ELECTRONICS_LINE:{name:'Ligne électronique automatisée',price:25_000_000n},WOODWORK_LINE:{name:'Atelier mobilier CNC',price:12_000_000n},ROBOTICS:{name:'Cellules robotisées',price:40_000_000n}} as const;
+const equipmentCatalog={ASSEMBLY_LINE:{name:'Ligne d’assemblage automobile',price:50_000_000n},ELECTRONICS_LINE:{name:'Ligne électronique automatisée',price:25_000_000n},WOODWORK_LINE:{name:'Atelier mobilier CNC',price:12_000_000n},ROBOTICS:{name:'Cellules robotisées',price:40_000_000n},SOLAR_ARRAY:{name:'Centrale solaire photovoltaïque',price:18_500_000n}} as const;
 const productionCatalog={VEHICLE:{name:'Véhicule Industrium',sku:'FACTORY_VEHICLE',equipment:'ASSEMBLY_LINE',unitCost:1_800_000n,seconds:45,staff:3,weight:1600,volume:12},COMPUTER:{name:'Ordinateur professionnel',sku:'FACTORY_COMPUTER',equipment:'ELECTRONICS_LINE',unitCost:45_000n,seconds:15,staff:2,weight:3,volume:.02},FURNITURE:{name:'Mobilier de bureau',sku:'FACTORY_FURNITURE',equipment:'WOODWORK_LINE',unitCost:22_000n,seconds:20,staff:1,weight:45,volume:.4}} as const;
 
 @Injectable()
