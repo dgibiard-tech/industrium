@@ -132,6 +132,7 @@ const nav = [
   "Usines",
   "Transport",
   "Carte",
+  "Mises à jour",
 ];
 export function App() {
   const { session } = useSession();
@@ -322,6 +323,8 @@ function Game() {
           />
         ) : tab === "Carte" ? (
           <WorldMap shipments={shipments.data ?? []} onNavigate={setTab} />
+        ) : tab === "Mises à jour" ? (
+          <Changelog />
         ) : (
           <Dashboard
             company={company}
@@ -334,6 +337,14 @@ function Game() {
     </div>
   );
 }
+const gameUpdates=[
+  {title:"Journal des mises à jour intégré",items:["Nouvel écran accessible dans le jeu","Historique permanent enregistré sur GitHub","Mise à jour prévue après chaque demande publiée"]},
+  {title:"Stocks, commandes et siège social",items:["Centre de stocks avancé avec alertes et réservations","Suivi animé des commandes internationales","Siège social 3D avec employés et terminal de direction"]},
+  {title:"Traçabilité et économie mondiale",items:["Pays et ville d’origine de chaque offre","Prix variables selon les stocks, achats et productions réelles","Cours, tendances et recommandations de prix"]},
+  {title:"Monde industriel 3D",items:["Carte enrichie avec relief, ville, énergie et trafic","Usines et entrepôts ultra-modernes visitables","Terminaux de gestion dans tous les bâtiments"]},
+  {title:"Transport et flotte",items:["30 missions minimum chaque jour","Réseau de hubs européens","Dispatch automatique des véhicules"]},
+] as const;
+function Changelog(){return <section className="changelogPage"><div className="changelogHero"><small>INDUSTRIUM · DÉVELOPPEMENT CONTINU</small><h2>Journal des mises à jour</h2><p>Chaque amélioration réalisée et publiée est enregistrée ici.</p><span>DERNIÈRE MISE À JOUR · 19 AOÛT 2026</span></div><div className="releaseTimeline">{gameUpdates.map((update,index)=><article key={update.title}><div className="releaseMarker"><i /><span>{index===0?"NOUVEAU":`VERSION ${gameUpdates.length-index}`}</span></div><div><small>19 AOÛT 2026</small><h3>{update.title}</h3><ul>{update.items.map(item=><li key={item}>{item}</li>)}</ul></div></article>)}</div></section>}
 function CreateCompany() {
   const qc = useQueryClient();
   const m = useMutation({

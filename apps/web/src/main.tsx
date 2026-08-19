@@ -4,4 +4,5 @@ import './facility-modern.css';
 import './map-perfect.css';
 import './economy-dynamic.css';
 import './warehouse-orders.css';
+import './changelog.css';
 createRoot(document.getElementById('root')!).render(<React.StrictMode><QueryClientProvider client={new QueryClient()}><App/></QueryClientProvider></React.StrictMode>);
