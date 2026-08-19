@@ -28,6 +28,8 @@ const ACCELERATION_GEM_COST=10;
 const DAILY_TRANSPORT_TARGET=30;
 const logisticsRoutes=[['Paris','Lyon',465],['Lyon','Berlin',1050],['Marseille','Barcelone',505],['Lille','Amsterdam',290],['Bordeaux','Madrid',690],['Strasbourg','Munich',360],['Nantes','Bruxelles',590],['Grenoble','Turin',325],['Duisbourg','Lyon',780],['Gdańsk','Paris',1540],['Milan','Zurich',280],['Prague','Vienne',335]] as const;
 const logisticsCargo=[['Composants électroniques',3200],['Batteries industrielles',10500],['Mobilier professionnel',6800],['Pièces automobiles',14200],['Équipements médicaux',2400],['Acier usiné',22000],['Ordinateurs professionnels',1800],['Machines-outils',11800]] as const;
+const cityCountries:Record<string,{country:string;code:string}>={Paris:{country:'France',code:'FR'},Lyon:{country:'France',code:'FR'},Marseille:{country:'France',code:'FR'},Lille:{country:'France',code:'FR'},Bordeaux:{country:'France',code:'FR'},Strasbourg:{country:'France',code:'FR'},Nantes:{country:'France',code:'FR'},Grenoble:{country:'France',code:'FR'},Berlin:{country:'Allemagne',code:'DE'},Duisbourg:{country:'Allemagne',code:'DE'},Munich:{country:'Allemagne',code:'DE'},Gdańsk:{country:'Pologne',code:'PL'},Turin:{country:'Italie',code:'IT'},Milan:{country:'Italie',code:'IT'},Barcelone:{country:'Espagne',code:'ES'},Madrid:{country:'Espagne',code:'ES'},Amsterdam:{country:'Pays-Bas',code:'NL'},Bruxelles:{country:'Belgique',code:'BE'},Zurich:{country:'Suisse',code:'CH'},Prague:{country:'Tchéquie',code:'CZ'},Vienne:{country:'Autriche',code:'AT'}};
+const originForCity=(city:string)=>cityCountries[city]??{country:'Europe',code:'EU'};
 const shipmentDurationMs=(distanceKm:number)=>Math.min(30,Math.max(2,Math.ceil(distanceKm/100)))*60_000;
 const vehicleValue=(purchasePriceCents:bigint,condition:number,mileageKm:number)=>purchasePriceCents*BigInt(Math.max(3000,condition*100-Math.min(5000,Math.floor(mileageKm/50))))/10_000n;
 const equipmentCatalog={ASSEMBLY_LINE:{name:'Ligne d’assemblage automobile',price:50_000_000n},ELECTRONICS_LINE:{name:'Ligne électronique automatisée',price:25_000_000n},WOODWORK_LINE:{name:'Atelier mobilier CNC',price:12_000_000n},ROBOTICS:{name:'Cellules robotisées',price:40_000_000n}} as const;
@@ -47,7 +49,7 @@ export class GameService {
     }
   }
   products(){return this.db.product.findMany({orderBy:{name:'asc'}})}
-  listings(){return this.db.marketListing.findMany({where:{status:'ACTIVE',quantity:{gt:0}},include:{product:true,seller:{select:{id:true,name:true}},warehouseStock:{include:{warehouse:true}}},orderBy:{unitPriceCents:'asc'}})}
+  async listings(){const listings=await this.db.marketListing.findMany({where:{status:'ACTIVE',quantity:{gt:0}},include:{product:true,seller:{select:{id:true,name:true,headquarters:true}},warehouseStock:{include:{warehouse:true}}},orderBy:{unitPriceCents:'asc'}});return listings.map(listing=>({...listing,origin:{city:listing.warehouseStock.warehouse.city,...originForCity(listing.warehouseStock.warehouse.city)}}))}
   async marketEconomy(){
     const now=Date.now(),since48h=new Date(now-48*60*60*1000),since24h=new Date(now-24*60*60*1000);
     const [products,production]=await Promise.all([
