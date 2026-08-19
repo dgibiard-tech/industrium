@@ -2,6 +2,12 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Réseau routier 3D et suivi GPS
+
+- Remplacement des liaisons simples par des routes courbes avec embranchements et rond-point.
+- Les véhicules suivent désormais réellement les tracés routiers.
+- Ajout d’un suivi GPS donnant les informations de chaque véhicule en circulation.
+
 ## 19 août 2026 — Journal des mises à jour intégré
 
 - Ajout d’un écran « Mises à jour » accessible depuis le jeu.

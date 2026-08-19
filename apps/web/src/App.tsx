@@ -338,6 +338,7 @@ function Game() {
   );
 }
 const gameUpdates=[
+  {title:"Réseau routier 3D et suivi GPS",items:["Routes courbes, embranchements et rond-point","Véhicules animés directement sur leur trajet","Informations détaillées pour chaque véhicule en circulation"]},
   {title:"Journal des mises à jour intégré",items:["Nouvel écran accessible dans le jeu","Historique permanent enregistré sur GitHub","Mise à jour prévue après chaque demande publiée"]},
   {title:"Stocks, commandes et siège social",items:["Centre de stocks avancé avec alertes et réservations","Suivi animé des commandes internationales","Siège social 3D avec employés et terminal de direction"]},
   {title:"Traçabilité et économie mondiale",items:["Pays et ville d’origine de chaque offre","Prix variables selon les stocks, achats et productions réelles","Cours, tendances et recommandations de prix"]},

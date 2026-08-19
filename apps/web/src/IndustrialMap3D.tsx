@@ -129,6 +129,12 @@ function addRoad(scene: THREE.Scene, a: THREE.Vector3, b: THREE.Vector3) {
   scene.add(line);
 }
 
+function addCurvedRoad(scene:THREE.Scene,points:THREE.Vector3[]){
+  const curve=new THREE.CatmullRomCurve3(points.map(point=>point.clone()),false,"catmullrom",.35),samples=22;
+  for(let index=0;index<samples;index++)addRoad(scene,curve.getPoint(index/samples),curve.getPoint((index+1)/samples));
+  return curve;
+}
+
 function addTree(scene: THREE.Scene, x: number, z: number, size: number) {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
@@ -284,10 +290,15 @@ function addExterior(scene: THREE.Scene, active: Shipment[]) {
     new THREE.Vector3(15, 0.17, 18),
     new THREE.Vector3(29, 0.17, -23),
   ];
-  addRoad(scene, hubs[0], hubs[1]);
-  addRoad(scene, hubs[1], hubs[2]);
-  addRoad(scene, hubs[2], hubs[3]);
-  addRoad(scene, hubs[1], hubs[3]);
+  const routes=[
+    addCurvedRoad(scene,[hubs[0],new THREE.Vector3(-34,.17,8),new THREE.Vector3(-25,.17,-2),hubs[1]]),
+    addCurvedRoad(scene,[hubs[1],new THREE.Vector3(-8,.17,-1),new THREE.Vector3(3,.17,12),hubs[2]]),
+    addCurvedRoad(scene,[hubs[2],new THREE.Vector3(27,.17,10),new THREE.Vector3(33,.17,-8),hubs[3]]),
+    addCurvedRoad(scene,[hubs[1],new THREE.Vector3(-4,.17,-18),new THREE.Vector3(13,.17,-24),hubs[3]]),
+    addCurvedRoad(scene,[hubs[0],new THREE.Vector3(-13,.17,35),new THREE.Vector3(8,.17,30),hubs[2]]),
+  ];
+  const roundabout=new THREE.Mesh(new THREE.RingGeometry(4.2,7.2,48),material(0x24292b,.05,.9));roundabout.rotation.x=-Math.PI/2;roundabout.position.set(-5,.09,2);scene.add(roundabout);
+  for(let angle=0;angle<Math.PI*2;angle+=Math.PI/2){const islandLight=new THREE.PointLight(0xffb35b,3,7);islandLight.position.set(-5+Math.cos(angle)*5.7,1.2,2+Math.sin(angle)*5.7);scene.add(islandLight)}
   for (let i = 0; i < 28; i++)
     scene.add(
       box(
@@ -304,6 +315,7 @@ function addExterior(scene: THREE.Scene, active: Shipment[]) {
     hubs,
     trucks: active.map((shipment, i) => addTruck(scene, shipment, i)),
     animations,
+    routes,
   };
 }
 
@@ -595,14 +607,11 @@ export default function IndustrialMap3D({
       if (world)
         world.trucks.forEach((truck, i) => {
           const p =
-              (active[i].progressPercent / 100 + t * 0.012 + i * 0.17) % 1,
-            segment = Math.min(2, Math.floor(p * 3)),
-            local = p * 3 - segment;
-          truck.position
-            .copy(world.hubs[segment])
-            .lerp(world.hubs[segment + 1], local);
+              (active[i].progressPercent / 100 + t * 0.012) % 1,
+            route=world.routes[i%world.routes.length],next=route.getPointAt((p+.008)%1);
+          truck.position.copy(route.getPointAt(p));
           truck.position.y = 0.2;
-          truck.lookAt(world.hubs[segment + 1]);
+          truck.lookAt(next);
         });
       world?.animations.forEach((update) => update(t));
       interiorAnimations.forEach((update) => update(t));
@@ -682,6 +691,7 @@ export default function IndustrialMap3D({
             </div>
           </>
         )}
+        {!interior&&active.length>0&&<div className="vehicleTracker"><header><div><small>FLEET GPS · TEMPS RÉEL</small><b>{active.length} véhicule(s) localisé(s)</b></div><i/></header><div>{active.slice(0,8).map(shipment=><button key={shipment.id} onClick={()=>setSelection({kind:"vehicle",shipment})}><span className="trackerTruck">▰</span><div><b>{shipment.vehicle?.registration??shipment.reference}</b><small>{shipment.vehicle?.model??"Véhicule logistique"} · {shipment.cargoName}</small><em>{shipment.originCity} → {shipment.destinationCity}</em></div><strong>{shipment.progressPercent}%<small>État {shipment.vehicle?.condition??100}%</small></strong></button>)}</div></div>}
         {interior && (
           <>
             <div className="interiorBadge">
