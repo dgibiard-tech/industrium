@@ -1,4 +1,4 @@
-import { FormEvent, lazy, Suspense, useState } from "react";
+import { FormEvent, lazy, Suspense, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, money } from "./api";
 import { useSession } from "./store";
@@ -8,6 +8,7 @@ type Company = {
   name: string;
   sector: string;
   account: { balanceCents: string };
+  gems: number;
   warehouses: {
     name: string;
     stocks: {
@@ -34,7 +35,7 @@ type Job = {
   company: { name: string };
 };
 type Vehicle = { id:string; registration:string; model:string; type:string; capacityKg:string; mileageKm:string; condition:number; status:"AVAILABLE"|"ASSIGNED"|"MAINTENANCE" };
-export type Shipment = { id:string; reference:string; cargoName:string; weightKg:string; originCity:string; destinationCity:string; distanceKm:number; rewardCents:string; status:"OPEN"|"ASSIGNED"|"IN_TRANSIT"|"DELIVERED"; progressPercent:number; carrier?:{name:string}; vehicle?:Vehicle };
+export type Shipment = { id:string; reference:string; cargoName:string; weightKg:string; originCity:string; destinationCity:string; distanceKm:number; rewardCents:string; status:"OPEN"|"ASSIGNED"|"IN_TRANSIT"|"DELIVERED"; progressPercent:number; acceptedAt?:string; arrivesAt?:string; carrier?:{name:string}; vehicle?:Vehicle };
 const nav = [
   "Vue d’ensemble",
   "Marché mondial",
@@ -145,7 +146,7 @@ function Game() {
     queryFn: () => api<Job[]>("/job-offers"),
   });
   const vehicles = useQuery({ queryKey:["vehicles"], queryFn:()=>api<Vehicle[]>("/vehicles") });
-  const shipments = useQuery({ queryKey:["shipments"], queryFn:()=>api<Shipment[]>("/shipments") });
+  const shipments = useQuery({ queryKey:["shipments"], queryFn:()=>api<Shipment[]>("/shipments"), refetchInterval:5000 });
   const company = companies.data?.[0];
   return (
     <div className="shell">
@@ -183,6 +184,7 @@ function Game() {
             <strong>
               {company ? money(company.account.balanceCents) : "—"}
             </strong>
+            {company&&<em className="gemBalance">◆ {company.gems} gemmes</em>}
           </div>
         </header>
         {!company ? (
@@ -492,15 +494,17 @@ const vehicleCatalog=[
 const vehicleImage=(model:string)=>vehicleCatalog.find(v=>v.model===model)?.image??vehicleCatalog[0].image;
 function Transport({company,vehicles,shipments}:{company:Company;vehicles:Vehicle[];shipments:Shipment[]}){
   const qc=useQueryClient();
+  const [now,setNow]=useState(Date.now());
+  useEffect(()=>{const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>window.clearInterval(timer)},[]);
   const refresh=()=>Promise.all([qc.invalidateQueries({queryKey:["vehicles"]}),qc.invalidateQueries({queryKey:["shipments"]}),qc.invalidateQueries({queryKey:["companies"]})]);
   const buy=useMutation({mutationFn:(modelId:string)=>api("/vehicles/buy-truck",{method:"POST",body:JSON.stringify({companyId:company.id,modelId})}),onSuccess:refresh});
   const assign=useMutation({mutationFn:({shipmentId,vehicleId}:{shipmentId:string;vehicleId:string})=>api(`/shipments/${shipmentId}/assign`,{method:"POST",body:JSON.stringify({companyId:company.id,vehicleId})}),onSuccess:refresh});
-  const advance=useMutation({mutationFn:(shipmentId:string)=>api(`/shipments/${shipmentId}/advance`,{method:"POST",body:JSON.stringify({companyId:company.id})}),onSuccess:refresh});
+  const accelerate=useMutation({mutationFn:(shipmentId:string)=>api(`/shipments/${shipmentId}/accelerate`,{method:"POST",body:JSON.stringify({companyId:company.id})}),onSuccess:refresh});
   const available=vehicles.filter(v=>v.status==="AVAILABLE");
   const active=shipments.filter(s=>s.carrier?.name===company.name&&s.status!=="DELIVERED");
   const open=shipments.filter(s=>s.status==="OPEN");
-  const error=buy.error||assign.error||advance.error;
-  return <section className="transportPage"><div className="fleetHeader"><div><small>DIVISION LOGISTIQUE</small><h2>Centre de transport</h2><p>Composez une flotte moderne adaptée à chaque type de fret.</p></div></div><div className="vehicleShop">{vehicleCatalog.map(v=><article className={`shopVehicle ${v.accent}`} key={v.id}><img src={v.image} alt={v.model}/><div><small>NOUVEAU VÉHICULE</small><h3>{v.model}</h3><p>{v.type}</p><dl><span><b>{v.capacity} t</b> capacité</span><span><b>{v.range}</b> autonomie</span></dl><button onClick={()=>buy.mutate(v.id)} disabled={buy.isPending}>Acheter · {money(v.price)}</button></div></article>)}</div><div className="transportMetrics"><Card label="Véhicules" value={String(vehicles.length)} delta={`${available.length} disponible(s)`}/><Card label="Missions actives" value={String(active.length)} delta="Opérations en cours"/><Card label="Contrats ouverts" value={String(open.length)} delta="Marché européen"/></div>{error&&<p className="error">{error.message}</p>}<h3>Flotte de l’entreprise</h3><div className="vehicleRow">{vehicles.length?vehicles.map(v=><article className="vehicleCard modern" key={v.id}><img src={vehicleImage(v.model)} alt={v.model}/><small>{v.registration}</small><h3>{v.model}</h3><p>{v.type} · {Number(v.capacityKg)/1000} t</p><div className="condition"><span style={{width:`${v.condition}%`}}></span></div><footer><b>{v.condition}% état</b><em className={v.status.toLowerCase()}>{v.status}</em></footer></article>):<div className="emptyFleet">Aucun véhicule. Choisissez votre premier modèle dans le catalogue.</div>}</div>{active.length>0&&<><h3>Convois en cours</h3><div className="activeConvoys">{active.map(s=><article key={s.id}><div><small>{s.reference} · {s.vehicle?.registration}</small><b>{s.originCity} → {s.destinationCity}</b><span>{s.cargoName} · {Number(s.weightKg)/1000} t</span></div><div className="routeProgress"><i style={{width:`${s.progressPercent}%`}}></i><span>{s.progressPercent}%</span></div><button disabled={advance.isPending} onClick={()=>advance.mutate(s.id)}>{s.progressPercent===75?"Confirmer la livraison":"Avancer de 25%"}</button></article>)}</div></>}<h3>Bourse de fret</h3><div className="missionGrid">{open.map(s=>{const truck=available.find(v=>Number(v.capacityKg)>=Number(s.weightKg));return <article className="missionCard" key={s.id}><div className="missionRef"><small>{s.reference}</small><b>{money(s.rewardCents)}</b></div><h3>{s.originCity} <span>→</span> {s.destinationCity}</h3><p>{s.cargoName}</p><dl><div><dt>Distance</dt><dd>{s.distanceKm.toLocaleString("fr-FR")} km</dd></div><div><dt>Charge</dt><dd>{Number(s.weightKg)/1000} t</dd></div></dl><button disabled={!truck||assign.isPending} onClick={()=>truck&&assign.mutate({shipmentId:s.id,vehicleId:truck.id})}>{truck?`Accepter avec ${truck.registration}`:"Aucun camion compatible"}</button></article>})}</div></section>
+  const error=buy.error||assign.error||accelerate.error;
+  return <section className="transportPage"><div className="fleetHeader"><div><small>DIVISION LOGISTIQUE</small><h2>Centre de transport</h2><p>Les convois roulent automatiquement, même lorsque vous quittez le jeu.</p></div><div className="gemWallet">◆ {company.gems} gemmes</div></div><div className="vehicleShop">{vehicleCatalog.map(v=><article className={`shopVehicle ${v.accent}`} key={v.id}><img src={v.image} alt={v.model}/><div><small>NOUVEAU VÉHICULE</small><h3>{v.model}</h3><p>{v.type}</p><dl><span><b>{v.capacity} t</b> capacité</span><span><b>{v.range}</b> autonomie</span></dl><button onClick={()=>buy.mutate(v.id)} disabled={buy.isPending}>Acheter · {money(v.price)}</button></div></article>)}</div><div className="transportMetrics"><Card label="Véhicules" value={String(vehicles.length)} delta={`${available.length} disponible(s)`}/><Card label="Missions actives" value={String(active.length)} delta="Transport automatique"/><Card label="Contrats ouverts" value={String(open.length)} delta="Marché européen"/></div>{error&&<p className="error">{error.message}</p>}<h3>Flotte de l’entreprise</h3><div className="vehicleRow">{vehicles.length?vehicles.map(v=><article className="vehicleCard modern" key={v.id}><img src={vehicleImage(v.model)} alt={v.model}/><small>{v.registration}</small><h3>{v.model}</h3><p>{v.type} · {Number(v.capacityKg)/1000} t</p><div className="condition"><span style={{width:`${v.condition}%`}}></span></div><footer><b>{v.condition}% état</b><em className={v.status.toLowerCase()}>{v.status}</em></footer></article>):<div className="emptyFleet">Aucun véhicule. Choisissez votre premier modèle dans le catalogue.</div>}</div>{active.length>0&&<><h3>Convois automatiques en cours</h3><div className="activeConvoys">{active.map(s=>{const remaining=Math.max(0,new Date(s.arrivesAt??now).getTime()-now);const minutes=Math.floor(remaining/60000),seconds=Math.floor(remaining%60000/1000);return <article key={s.id}><div><small>{s.reference} · {s.vehicle?.registration}</small><b>{s.originCity} → {s.destinationCity}</b><span>{s.cargoName} · arrivée dans {minutes}m {String(seconds).padStart(2,"0")}s</span></div><div className="routeProgress"><i style={{width:`${s.progressPercent}%`}}></i><span>{s.progressPercent}%</span></div><button className="gemSpeed" disabled={accelerate.isPending||company.gems<10} onClick={()=>accelerate.mutate(s.id)}>◆ Accélérer · 10</button></article>})}</div></>}<h3>Bourse de fret</h3><div className="missionGrid">{open.map(s=>{const truck=available.find(v=>Number(v.capacityKg)>=Number(s.weightKg));return <article className="missionCard" key={s.id}><div className="missionRef"><small>{s.reference}</small><b>{money(s.rewardCents)}</b></div><h3>{s.originCity} <span>→</span> {s.destinationCity}</h3><p>{s.cargoName}</p><dl><div><dt>Distance</dt><dd>{s.distanceKm.toLocaleString("fr-FR")} km</dd></div><div><dt>Durée</dt><dd>{Math.min(30,Math.max(2,Math.ceil(s.distanceKm/100)))} min</dd></div><div><dt>Charge</dt><dd>{Number(s.weightKg)/1000} t</dd></div></dl><button disabled={!truck||assign.isPending} onClick={()=>truck&&assign.mutate({shipmentId:s.id,vehicleId:truck.id})}>{truck?`Lancer avec ${truck.registration}`:"Aucun camion compatible"}</button></article>})}</div></section>
 }
 function WorldMap({shipments}:{shipments:Shipment[]}){return <Suspense fallback={<div className="empty">Initialisation du monde 3D…</div>}><IndustrialMap3D shipments={shipments}/></Suspense>}
 function Jobs({ data }: { data: Job[] }) {

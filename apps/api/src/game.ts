@@ -19,6 +19,8 @@ const vehicleCatalog={
 } as const;
 
 const companyView={account:true,warehouses:{include:{stocks:{include:{product:true}}}},members:true} as const;
+const ACCELERATION_GEM_COST=10;
+const shipmentDurationMs=(distanceKm:number)=>Math.min(30,Math.max(2,Math.ceil(distanceKm/100)))*60_000;
 
 @Injectable()
 export class GameService {
@@ -81,7 +83,32 @@ export class GameService {
   async createJob(userId:string,companyId:string,dto:JobDto){const allowed=await this.db.companyMember.findFirst({where:{companyId,userId,role:{in:['OWNER','MANAGER']}}});if(!allowed) throw new NotFoundException();return this.db.jobOffer.create({data:{...dto,salaryCents:BigInt(dto.salaryCents),companyId}})}
   async apply(userId:string,jobId:string){const job=await this.db.jobOffer.findUnique({where:{id:jobId}});if(!job||job.status!=='OPEN')throw new NotFoundException();return this.db.employeeContract.upsert({where:{userId_jobOfferId:{userId,jobOfferId:jobId}},create:{userId,jobOfferId:jobId,salaryCents:job.salaryCents},update:{}})}
   async vehicles(userId:string){return this.db.vehicle.findMany({where:{company:{members:{some:{userId}}}},orderBy:{createdAt:'asc'}})}
-  shipments(userId:string){return this.db.shipment.findMany({where:{OR:[{status:'OPEN'},{carrier:{members:{some:{userId}}}}]},include:{carrier:{select:{name:true}},vehicle:true},orderBy:[{status:'asc'},{rewardCents:'desc'}]})}
+  async shipments(userId:string){
+    const moving=await this.db.shipment.findMany({where:{carrier:{members:{some:{userId}}},status:{in:['ASSIGNED','IN_TRANSIT']},acceptedAt:{not:null},arrivesAt:{not:null}},include:{carrier:{include:{account:true}},vehicle:true}});
+    const now=new Date();
+    for(const shipment of moving){
+      if(!shipment.acceptedAt||!shipment.arrivesAt||!shipment.vehicle||!shipment.carrier?.account) continue;
+      if(shipment.arrivesAt<=now){
+        await this.completeShipment(shipment.id,shipment.vehicle.id,shipment.carrier.account.id,shipment.rewardCents,shipment.distanceKm,now);
+      }else{
+        const total=shipment.arrivesAt.getTime()-shipment.acceptedAt.getTime();
+        const elapsed=now.getTime()-shipment.acceptedAt.getTime();
+        const progress=Math.max(1,Math.min(99,Math.floor(elapsed/total*100)));
+        if(progress!==shipment.progressPercent) await this.db.shipment.updateMany({where:{id:shipment.id,status:{in:['ASSIGNED','IN_TRANSIT']}},data:{progressPercent:progress,status:'IN_TRANSIT'}});
+      }
+    }
+    return this.db.shipment.findMany({where:{OR:[{status:'OPEN'},{carrier:{members:{some:{userId}}}}]},include:{carrier:{select:{name:true}},vehicle:true},orderBy:[{status:'asc'},{rewardCents:'desc'}]});
+  }
+  private async completeShipment(shipmentId:string,vehicleId:string,accountId:string,rewardCents:bigint,distanceKm:number,completedAt:Date){
+    return this.db.$transaction(async tx=>{
+      const claimed=await tx.shipment.updateMany({where:{id:shipmentId,status:{in:['ASSIGNED','IN_TRANSIT']}},data:{progressPercent:100,status:'DELIVERED',deliveredAt:completedAt,arrivesAt:completedAt}});
+      if(claimed.count!==1) return false;
+      await tx.vehicle.update({where:{id:vehicleId},data:{status:'AVAILABLE',mileageKm:{increment:distanceKm},condition:{decrement:2}}});
+      await tx.bankAccount.update({where:{id:accountId},data:{balanceCents:{increment:rewardCents},version:{increment:1}}});
+      await tx.ledgerTransaction.create({data:{accountId,type:'SALE',amountCents:rewardCents,description:`Livraison automatique`,referenceId:shipmentId}});
+      return true;
+    });
+  }
   async buyTruck(userId:string,dto:BuyVehicleDto){
     const selected=vehicleCatalog[dto.modelId as keyof typeof vehicleCatalog];
     const price=selected.price;
@@ -101,22 +128,27 @@ export class GameService {
       const shipment=await tx.shipment.findUnique({where:{id:shipmentId}});
       if(!vehicle||!shipment||shipment.status!=='OPEN') throw new BadRequestException('Mission ou véhicule indisponible');
       if(vehicle.capacityKg.lt(shipment.weightKg)) throw new BadRequestException('Capacité du véhicule insuffisante');
-      const claimed=await tx.shipment.updateMany({where:{id:shipment.id,status:'OPEN'},data:{carrierId:dto.companyId,vehicleId:vehicle.id,status:'ASSIGNED',acceptedAt:new Date()}});
+      const acceptedAt=new Date();
+      const arrivesAt=new Date(acceptedAt.getTime()+shipmentDurationMs(shipment.distanceKm));
+      const claimed=await tx.shipment.updateMany({where:{id:shipment.id,status:'OPEN'},data:{carrierId:dto.companyId,vehicleId:vehicle.id,status:'IN_TRANSIT',acceptedAt,arrivesAt,progressPercent:1}});
       if(claimed.count!==1) throw new BadRequestException('Mission déjà attribuée');
       await tx.vehicle.update({where:{id:vehicle.id},data:{status:'ASSIGNED'}});
       return tx.shipment.findUniqueOrThrow({where:{id:shipment.id},include:{vehicle:true}});
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
   }
-  async advanceShipment(userId:string,shipmentId:string,dto:CompanyActionDto){
+  async accelerateShipment(userId:string,shipmentId:string,dto:CompanyActionDto){
     return this.db.$transaction(async tx=>{
       const shipment=await tx.shipment.findFirst({where:{id:shipmentId,carrierId:dto.companyId,carrier:{members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}},include:{vehicle:true,carrier:{include:{account:true}}}});
-      if(!shipment?.vehicle||!shipment.carrier?.account||shipment.status==='DELIVERED'||shipment.status==='OPEN') throw new BadRequestException('Mission impossible à avancer');
-      const progress=Math.min(100,shipment.progressPercent+25);
-      if(progress<100) return tx.shipment.update({where:{id:shipment.id},data:{progressPercent:progress,status:'IN_TRANSIT'}});
+      if(!shipment?.vehicle||!shipment.carrier?.account||shipment.status==='DELIVERED'||shipment.status==='OPEN') throw new BadRequestException('Transport déjà terminé ou indisponible');
+      const now=new Date();
+      const claimed=await tx.shipment.updateMany({where:{id:shipment.id,status:{in:['ASSIGNED','IN_TRANSIT']}},data:{progressPercent:100,status:'DELIVERED',deliveredAt:now,arrivesAt:now}});
+      if(claimed.count!==1) throw new BadRequestException('Ce transport vient déjà d’être terminé');
+      const debit=await tx.company.updateMany({where:{id:dto.companyId,gems:{gte:ACCELERATION_GEM_COST}},data:{gems:{decrement:ACCELERATION_GEM_COST}}});
+      if(debit.count!==1) throw new BadRequestException(`Il faut ${ACCELERATION_GEM_COST} gemmes pour accélérer`);
       await tx.vehicle.update({where:{id:shipment.vehicle.id},data:{status:'AVAILABLE',mileageKm:{increment:shipment.distanceKm},condition:{decrement:2}}});
       await tx.bankAccount.update({where:{id:shipment.carrier.account.id},data:{balanceCents:{increment:shipment.rewardCents},version:{increment:1}}});
-      await tx.ledgerTransaction.create({data:{accountId:shipment.carrier.account.id,type:'SALE',amountCents:shipment.rewardCents,description:`Livraison ${shipment.reference}`,referenceId:shipment.id}});
-      return tx.shipment.update({where:{id:shipment.id},data:{progressPercent:100,status:'DELIVERED',deliveredAt:new Date()}});
+      await tx.ledgerTransaction.create({data:{accountId:shipment.carrier.account.id,type:'SALE',amountCents:shipment.rewardCents,description:`Livraison accélérée ${shipment.reference}`,referenceId:shipment.id}});
+      return tx.shipment.findUniqueOrThrow({where:{id:shipment.id},include:{vehicle:true}});
     });
   }
 }
@@ -136,7 +168,7 @@ export class GameController {
   @Post('vehicles/buy-truck') buyTruck(@Req() r:AuthRequest,@Body() d:BuyVehicleDto){return this.game.buyTruck(r.user.sub,d)}
   @Get('shipments') shipments(@Req() r:AuthRequest){return this.game.shipments(r.user.sub)}
   @Post('shipments/:id/assign') assignShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:AssignShipmentDto){return this.game.assignShipment(r.user.sub,id,d)}
-  @Post('shipments/:id/advance') advanceShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.advanceShipment(r.user.sub,id,d)}
+  @Post('shipments/:id/accelerate') accelerateShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.accelerateShipment(r.user.sub,id,d)}
 }
 
 export function assertPurchase(quantity:number, available:number, balanceCents:bigint, unitPriceCents:bigint){if(quantity<=0||quantity>available)throw new Error('Stock insuffisant');const total=BigInt(quantity)*unitPriceCents;if(total>balanceCents)throw new Error('Trésorerie insuffisante');return total}

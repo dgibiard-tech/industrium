@@ -82,6 +82,7 @@ model Company {
   headquarters String
   legalForm String
   reputation Int @default(50)
+  gems Int @default(100)
   createdAt DateTime @default(now())
   members CompanyMember[]
   account BankAccount?
@@ -124,6 +125,7 @@ model Shipment {
   carrier Company? @relation("carrier", fields: [carrierId], references: [id])
   vehicle Vehicle? @relation(fields: [vehicleId], references: [id])
   acceptedAt DateTime?
+  arrivesAt DateTime?
   deliveredAt DateTime?
   createdAt DateTime @default(now())
   @@index([status, createdAt])
