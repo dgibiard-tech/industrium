@@ -1,0 +1,18 @@
+html,body,#root{height:100%;overflow:hidden}
+*{scrollbar-width:thin;scrollbar-color:#d8752b #11191e}
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:#11191e;border-left:1px solid #2d3a41}
+*::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#ee8c3d,#a64a18);border:2px solid #11191e;border-radius:8px}
+*::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#ffad62,#d56824)}
+*::-webkit-scrollbar-corner{background:#11191e}
+.shell{height:100vh;min-height:0}
+.shell>aside{height:100vh;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
+.content{height:100vh;min-width:0;overflow-y:scroll!important;overflow-x:auto!important;scrollbar-gutter:stable both-edges}
+.inspectionCard,.buildingCard{max-height:calc(100% - 36px);overflow-y:auto!important;overflow-x:hidden}
+.facilityConsole{max-height:calc(100% - 36px);overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
+.vehicleTracker>div,.table,.activity,.productionOrders,.orderList,.stockGrid,.marketCards,.usedMarket,.vehicleRow,.missionGrid,.activeConvoys,.negotiations,.releaseTimeline{scrollbar-gutter:stable}
+.table,.productionOrders,.orderList,.marketCards,.usedMarket,.vehicleRow,.missionGrid,.activeConvoys{max-height:72vh;overflow-y:auto;overflow-x:hidden;padding-right:4px}
+.stockGrid{max-height:68vh;overflow-y:auto;overflow-x:hidden;padding-right:4px}
+.activity,.jobs,.equipmentGrid,.liveJobs,.applicantList,.hubGrid{max-height:65vh;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;padding-right:4px}
+.negotiations{max-height:65vh;overflow:auto}.releaseTimeline{max-height:72vh;overflow-y:auto;padding-right:8px}
+@media(max-width:850px){.content{height:100dvh}.shell>aside{height:100dvh}.table,.productionOrders,.orderList,.marketCards,.usedMarket,.vehicleRow,.missionGrid,.activeConvoys,.stockGrid{max-height:65dvh}}

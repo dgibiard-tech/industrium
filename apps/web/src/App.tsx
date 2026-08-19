@@ -338,6 +338,7 @@ function Game() {
   );
 }
 const gameUpdates=[
+  {title:"Défilement complet de l’interface",items:["Barres de défilement sur toutes les pages principales","Listes, terminaux et fenêtres 3D désormais défilables","Style industriel et adaptation mobile"]},
   {title:"Intérieurs industriels photoréalistes 360°",items:["Usines et entrepôts entièrement redessinés","Décors continus dans toutes les directions","Machines, racks, quais et zones de sécurité plus réalistes"]},
   {title:"Refonte panoramique et corrections de la carte",items:["Nouveau décor photoréaliste à 360° autour du monde","Routes et marquages stabilisés","Suppression des sauts de véhicules et des ruptures visuelles"]},
   {title:"Réseau routier 3D et suivi GPS",items:["Routes courbes, embranchements et rond-point","Véhicules animés directement sur leur trajet","Informations détaillées pour chaque véhicule en circulation"]},

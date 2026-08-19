@@ -2,6 +2,13 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Défilement complet de l’interface
+
+- Ajout de barres de défilement industrielles sur toutes les pages principales.
+- Ajout du défilement aux listes de stocks, commandes, marchés, véhicules et productions.
+- Correction du défilement dans les fenêtres 3D, terminaux et fiches d’inspection.
+- Adaptation des barres de défilement aux écrans mobiles.
+
 ## 19 août 2026 — Intérieurs industriels photoréalistes 360°
 
 - Refonte complète du design intérieur des usines et entrepôts.
