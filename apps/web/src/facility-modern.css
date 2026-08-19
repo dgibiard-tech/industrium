@@ -1,0 +1,33 @@
+.factoryHero { background: linear-gradient(90deg,#08131ae8,#10283a70),url('/assets/factory-interior-world-v3.png') center/cover; border-color:#277f9e; box-shadow:0 18px 48px #0009, inset 0 -3px #ef8526; }
+.factoryMetrics > article:nth-child(1) { border-top:3px solid #26bce2; }
+.factoryMetrics > article:nth-child(2) { border-top:3px solid #c35cff; }
+.factoryMetrics > article:nth-child(3) { border-top:3px solid #72d95c; }
+.equipmentGrid article { position:relative; overflow:hidden; background:linear-gradient(145deg,#202a31,#182027); }
+.equipmentGrid article:nth-child(1) { border-left:3px solid #ff8a24; }
+.equipmentGrid article:nth-child(2) { border-left:3px solid #21bce7; }
+.equipmentGrid article:nth-child(3) { border-left:3px solid #7bd95c; }
+.equipmentGrid article:nth-child(4) { border-left:3px solid #c35cff; }
+.equipmentGrid article:after { content:""; position:absolute; width:80px; height:80px; right:-40px; top:-40px; border-radius:50%; background:currentColor; opacity:.08; }
+.smartModules { display:grid; grid-template-columns:1.5fr repeat(3,1fr); gap:8px; margin-top:16px; padding:14px; background:linear-gradient(135deg,#101a20,#1b252c); border:1px solid #3b4b54; }
+.smartModules>div { grid-row:span 2; padding:8px; }
+.smartModules small { color:#38c9ed; font-size:8px; letter-spacing:1.4px; }
+.smartModules h3 { margin:5px 0; font-size:17px; }
+.smartModules p { color:#82939d; font-size:9px; margin:0; }
+.smartModules button { display:grid; grid-template-columns:auto 1fr; gap:3px 8px; text-align:left; padding:10px; color:#b8c3c9; background:#172128; border:1px solid #33434b; font-size:9px; }
+.smartModules button i { grid-row:span 2; align-self:center; width:8px; height:8px; border-radius:50%; background:#53616a; }
+.smartModules button span { color:#677781; font-size:7px; }
+.smartModules button.active { color:white; border-color:#24a9c9; background:#17323d; }.smartModules button.active i { background:#39d2f3; box-shadow:0 0 10px #39d2f3; }.smartModules button.active span { color:#70db91; }
+.smartModules button.module1.active,.smartModules button.module4.active{border-color:#c35cff}.smartModules button.module1.active i,.smartModules button.module4.active i{background:#c35cff;box-shadow:0 0 10px #c35cff}.smartModules button.module2.active,.smartModules button.module3.active{border-color:#76dd62}.smartModules button.module2.active i,.smartModules button.module3.active i{background:#76dd62;box-shadow:0 0 10px #76dd62}
+.facilityConsole { position:absolute; z-index:4; right:18px; bottom:18px; width:min(440px,calc(100% - 36px)); background:#0b141bea; border:1px solid #39748b; border-top:3px solid #22bee7; padding:15px; box-shadow:0 20px 55px #000b; backdrop-filter:blur(12px); }
+.facilityConsole>small { color:#41d0f2; font-size:8px; letter-spacing:1.7px; font-weight:800; }
+.facilityTabs { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin:10px 0; }
+.facilityTabs button { padding:8px 4px; border:1px solid #344852; background:#17242b; color:#8fa2ac; font-size:8px; cursor:pointer; }
+.facilityTabs button.active { color:white; border-color:#38c9ed; background:linear-gradient(135deg,#11627a,#1b3440); box-shadow:inset 0 -2px #43d8ff; }
+.facilityStatus { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px; padding:10px; background:#111e25; }
+.facilityStatus>div { display:flex; flex-direction:column; }
+.facilityStatus b { font-size:11px; }
+.facilityStatus span { color:#84959e; font-size:9px; }
+.facilityStatus em { color:#72df91; font-size:8px; font-style:normal; }
+.statusOrb { width:13px; height:13px; border-radius:50%; background:#20c9f2; box-shadow:0 0 14px currentColor; }
+.statusOrb.color1 { background:#c35cff; }.statusOrb.color2 { background:#ff8a24; }.statusOrb.color3 { background:#76dd62; }
+@media(max-width:900px){.smartModules{grid-template-columns:1fr 1fr}.smartModules>div{grid-column:1/-1;grid-row:auto}}@media(max-width:650px){.facilityConsole{right:10px;bottom:105px;width:calc(100% - 20px)}.facilityTabs{grid-template-columns:1fr 1fr}.facilityConsole .facilityStatus{padding:7px}.smartModules{grid-template-columns:1fr}}

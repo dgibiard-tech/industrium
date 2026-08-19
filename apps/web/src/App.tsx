@@ -1174,6 +1174,7 @@ function FactoryManagement({
   const qc = useQueryClient();
   const [quantity, setQuantity] = useState(1);
   const [now, setNow] = useState(Date.now());
+  const [smartModules, setSmartModules] = useState(["Robotique", "Sécurité"]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -1251,6 +1252,17 @@ function FactoryManagement({
           value={String(factory.equipment.length)}
           delta={`Niveau usine ${factory.level}`}
         />
+      </div>
+      <div className="smartModules">
+        <div>
+          <small>PILOTAGE SMART FACTORY</small>
+          <h3>Modules opérationnels</h3>
+          <p>Activez les systèmes pour personnaliser l’exploitation du site.</p>
+        </div>
+        {["Robotique", "Qualité IA", "Énergie verte", "Sécurité", "Maintenance prédictive", "Jumeau numérique"].map((module, index) => {
+          const active = smartModules.includes(module);
+          return <button className={active ? `active module${index}` : `module${index}`} key={module} onClick={() => setSmartModules((current) => active ? current.filter((item) => item !== module) : [...current, module])}><i />{module}<span>{active ? "ACTIF" : "ACTIVER"}</span></button>;
+        })}
       </div>
       <div className="factoryColumns">
         <div>

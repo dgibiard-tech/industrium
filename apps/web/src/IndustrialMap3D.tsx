@@ -265,8 +265,8 @@ function addInterior(scene: THREE.Scene, interior: NonNullable<Interior>) {
   scene.fog = new THREE.Fog(0x11171a, 35, 90);
   const backdropTexture = new THREE.TextureLoader().load(
     interior.kind === "factory"
-      ? "/assets/factory-interior-world-v2.png"
-      : "/assets/warehouse-interior-world-v2.png",
+      ? "/assets/factory-interior-world-v3.png"
+      : "/assets/warehouse-interior-world-v3.png",
   );
   backdropTexture.colorSpace = THREE.SRGBColorSpace;
   const backdrop = new THREE.Mesh(
@@ -282,28 +282,13 @@ function addInterior(scene: THREE.Scene, interior: NonNullable<Interior>) {
   for (let z = -16; z <= 16; z += 5.4) {
     scene.add(box(52, 0.24, 0.28, material(0x1c252a, 0.65), 0, 11.8, z));
   }
-  scene.add(
-    box(
-      0.16,
-      0.03,
-      36,
-      new THREE.MeshBasicMaterial({ color: 0xd7812e }),
-      -3.2,
-      0.1,
-      0,
-    ),
-  );
-  scene.add(
-    box(
-      0.16,
-      0.03,
-      36,
-      new THREE.MeshBasicMaterial({ color: 0xd7812e }),
-      3.2,
-      0.1,
-      0,
-    ),
-  );
+  const zoneColors = [0x00c8ff, 0xff8a24, 0x7ee35b, 0xc45cff];
+  for (const [index, x] of [-9.6, -3.2, 3.2, 9.6].entries()) {
+    scene.add(box(0.18, 0.035, 36, new THREE.MeshBasicMaterial({ color: zoneColors[index] }), x, 0.1, 0));
+    const zoneLight = new THREE.PointLight(zoneColors[index], 7, 12);
+    zoneLight.position.set(x, 3.5, -2);
+    scene.add(zoneLight);
+  }
   for (let x = -20; x <= 20; x += 10) {
     const lamp = box(
       5,
@@ -333,7 +318,7 @@ function addInterior(scene: THREE.Scene, interior: NonNullable<Interior>) {
               4.8,
               1.15,
               1.7,
-              material((x + z + y) % 3 ? 0x9a673b : 0x375c6d),
+              material(zoneColors[Math.abs(Math.round(x + z + y)) % zoneColors.length], 0.4),
               x,
               y,
               z,
@@ -433,6 +418,7 @@ export default function IndustrialMap3D({
   const mount = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<Selection>(null);
   const [interior, setInterior] = useState<Interior>(null);
+  const [activeZone, setActiveZone] = useState(0);
   const active = shipments.filter(
     (s) => s.status === "ASSIGNED" || s.status === "IN_TRANSIT",
   );
@@ -634,15 +620,29 @@ export default function IndustrialMap3D({
           </div>
         )}
         {interior && (
-          <div className="interiorBadge">
-            <small>VISITE EN COURS</small>
-            <strong>
-              {interior.kind === "factory"
-                ? "Lignes de production"
-                : "Zone de stockage"}
-            </strong>
-            <span>Explorez librement le bâtiment</span>
-          </div>
+          <>
+            <div className="interiorBadge">
+              <small>SITE ULTRA-MODERNE · CONNECTÉ</small>
+              <strong>{interior.kind === "factory" ? "Smart Factory 4.0" : "Smart Hub logistique"}</strong>
+              <span>Robots, énergie et sécurité pilotés en temps réel</span>
+            </div>
+            <div className="facilityConsole">
+              <small>CENTRE DE CONTRÔLE</small>
+              <div className="facilityTabs">
+                {(interior.kind === "factory"
+                  ? ["Production", "Robots", "Qualité", "Énergie"]
+                  : ["Stockage", "Tri robotisé", "Quais", "Énergie"]
+                ).map((zone, index) => (
+                  <button className={activeZone === index ? "active" : ""} key={zone} onClick={() => setActiveZone(index)}>{zone}</button>
+                ))}
+              </div>
+              <div className="facilityStatus">
+                <i className={`statusOrb color${activeZone}`} />
+                <div><b>{["Opérationnel", "Automatique", "Contrôle actif", "Optimisé"][activeZone]}</b><span>{["Cadence nominale 94 %", "18 unités connectées", "Défauts détectés 0,3 %", "Économie actuelle 21 %"][activeZone]}</span></div>
+                <em>EN LIGNE</em>
+              </div>
+            </div>
+          </>
         )}
         {selection?.kind === "vehicle" && (
           <article className="inspectionCard">
