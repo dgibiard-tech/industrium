@@ -59,6 +59,40 @@ type VehicleMarketListing = {
   seller: { id: string; name: string; headquarters: string };
   vehicle: Vehicle;
 };
+type FactoryData = {
+  id: string;
+  name: string;
+  city: string;
+  level: number;
+  baseStaff: number;
+  payrollCents: string;
+  equipment: {
+    id: string;
+    kind: string;
+    name: string;
+    condition: number;
+    purchasePriceCents: string;
+    purchasedAt: string;
+  }[];
+  employees: {
+    id: string;
+    salaryCents: string;
+    lastSalaryPaidAt?: string;
+    user: { displayName: string };
+    jobOffer: { title: string };
+  }[];
+  productionOrders: {
+    id: string;
+    productType: "VEHICLE" | "COMPUTER" | "FURNITURE";
+    productName: string;
+    quantity: number;
+    unitCostCents: string;
+    status: "RUNNING" | "COMPLETED";
+    startedAt: string;
+    completesAt: string;
+    completedAt?: string;
+  }[];
+};
 export type Shipment = {
   id: string;
   reference: string;
@@ -81,6 +115,7 @@ const nav = [
   "Stocks",
   "Commandes",
   "Emplois",
+  "Usines",
   "Transport",
   "Carte",
 ];
@@ -171,6 +206,7 @@ function Game() {
   const companies = useQuery({
     queryKey: ["companies"],
     queryFn: () => api<Company[]>("/companies"),
+    refetchInterval: 5000,
   });
   const listings = useQuery({
     queryKey: ["listings"],
@@ -200,6 +236,12 @@ function Game() {
     refetchInterval: 5000,
   });
   const company = companies.data?.[0];
+  const factory = useQuery({
+    queryKey: ["factory", company?.id],
+    queryFn: () => api<FactoryData>(`/companies/${company!.id}/factories`),
+    enabled: !!company,
+    refetchInterval: 3000,
+  });
   return (
     <div className="shell">
       <aside>
@@ -249,6 +291,12 @@ function Game() {
           <Orders data={orders.data ?? []} />
         ) : tab === "Emplois" ? (
           <Jobs company={company} data={jobs.data ?? []} />
+        ) : tab === "Usines" ? (
+          factory.data ? (
+            <FactoryManagement company={company} factory={factory.data} />
+          ) : (
+            <div className="empty">Initialisation de l’usine…</div>
+          )
         ) : tab === "Transport" ? (
           <Transport
             company={company}
@@ -664,7 +712,14 @@ function Transport({
       }),
     onSuccess: refresh,
   });
-  const maintain = useMutation({mutationFn:(vehicleId:string)=>api(`/vehicles/${vehicleId}/maintenance`,{method:"POST",body:JSON.stringify({companyId:company.id})}),onSuccess:refresh});
+  const maintain = useMutation({
+    mutationFn: (vehicleId: string) =>
+      api(`/vehicles/${vehicleId}/maintenance`, {
+        method: "POST",
+        body: JSON.stringify({ companyId: company.id }),
+      }),
+    onSuccess: refresh,
+  });
   const available = vehicles.filter((v) => v.status === "AVAILABLE");
   const active = shipments.filter(
     (s) => s.carrier?.name === company.name && s.status !== "DELIVERED",
@@ -743,12 +798,36 @@ function Transport({
                 {v.type} · {Number(v.capacityKg) / 1000} t
               </p>
               <dl className="vehicleFacts">
-                <div><dt>Prix d’achat</dt><dd>{money(v.purchasePriceCents)}</dd></div>
-                <div><dt>Valeur actuelle</dt><dd>{money(v.currentValueCents)}</dd></div>
-                <div><dt>Mise en circulation</dt><dd>{new Date(v.createdAt).toLocaleDateString("fr-FR")}</dd></div>
-                <div><dt>Kilométrage</dt><dd>{Number(v.mileageKm).toLocaleString("fr-FR")} km</dd></div>
-                <div><dt>Dernier entretien</dt><dd>{v.lastMaintenanceAt ? new Date(v.lastMaintenanceAt).toLocaleDateString("fr-FR") : "Jamais"}</dd></div>
-                <div><dt>Entretiens</dt><dd>{v.maintenanceCount}</dd></div>
+                <div>
+                  <dt>Prix d’achat</dt>
+                  <dd>{money(v.purchasePriceCents)}</dd>
+                </div>
+                <div>
+                  <dt>Valeur actuelle</dt>
+                  <dd>{money(v.currentValueCents)}</dd>
+                </div>
+                <div>
+                  <dt>Mise en circulation</dt>
+                  <dd>{new Date(v.createdAt).toLocaleDateString("fr-FR")}</dd>
+                </div>
+                <div>
+                  <dt>Kilométrage</dt>
+                  <dd>{Number(v.mileageKm).toLocaleString("fr-FR")} km</dd>
+                </div>
+                <div>
+                  <dt>Dernier entretien</dt>
+                  <dd>
+                    {v.lastMaintenanceAt
+                      ? new Date(v.lastMaintenanceAt).toLocaleDateString(
+                          "fr-FR",
+                        )
+                      : "Jamais"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Entretiens</dt>
+                  <dd>{v.maintenanceCount}</dd>
+                </div>
               </dl>
               <div className="condition">
                 <span style={{ width: `${v.condition}%` }}></span>
@@ -757,8 +836,67 @@ function Transport({
                 <b>{v.condition}% état</b>
                 <em className={v.status.toLowerCase()}>{v.status}</em>
               </footer>
-              {v.status === "AVAILABLE" && <button className="maintainVehicle" disabled={maintain.isPending||v.condition===100} onClick={()=>maintain.mutate(v.id)}>Entretien · {money(Math.max(50_000,(100-v.condition)*50_000))}</button>}
-              {v.marketListings.length ? <div className="salePublished">En vente · {money(v.marketListings[0].askingPriceCents)}</div> : v.status === "AVAILABLE" && (selling === v.id ? <div className="sellEditor"><input autoFocus type="number" min="1000" step="100" value={salePrice} onChange={(event)=>setSalePrice(event.target.value)} placeholder={String(Math.round(Number(v.currentValueCents)/100))}/><button disabled={!salePrice||listVehicle.isPending} onClick={()=>listVehicle.mutate({vehicleId:v.id,askingPriceCents:Math.round(Number(salePrice)*100)})}>Publier</button><button className="cancelSale" onClick={()=>setSelling(null)}>×</button></div> : <button className="sellVehicle" onClick={()=>{setSelling(v.id);setSalePrice(String(Math.round(Number(v.currentValueCents)/100)))}}>Revendre sur le marché</button>)}
+              {v.status === "AVAILABLE" && (
+                <button
+                  className="maintainVehicle"
+                  disabled={maintain.isPending || v.condition === 100}
+                  onClick={() => maintain.mutate(v.id)}
+                >
+                  Entretien ·{" "}
+                  {money(Math.max(50_000, (100 - v.condition) * 50_000))}
+                </button>
+              )}
+              {v.marketListings.length ? (
+                <div className="salePublished">
+                  En vente · {money(v.marketListings[0].askingPriceCents)}
+                </div>
+              ) : (
+                v.status === "AVAILABLE" &&
+                (selling === v.id ? (
+                  <div className="sellEditor">
+                    <input
+                      autoFocus
+                      type="number"
+                      min="1000"
+                      step="100"
+                      value={salePrice}
+                      onChange={(event) => setSalePrice(event.target.value)}
+                      placeholder={String(
+                        Math.round(Number(v.currentValueCents) / 100),
+                      )}
+                    />
+                    <button
+                      disabled={!salePrice || listVehicle.isPending}
+                      onClick={() =>
+                        listVehicle.mutate({
+                          vehicleId: v.id,
+                          askingPriceCents: Math.round(Number(salePrice) * 100),
+                        })
+                      }
+                    >
+                      Publier
+                    </button>
+                    <button
+                      className="cancelSale"
+                      onClick={() => setSelling(null)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="sellVehicle"
+                    onClick={() => {
+                      setSelling(v.id);
+                      setSalePrice(
+                        String(Math.round(Number(v.currentValueCents) / 100)),
+                      );
+                    }}
+                  >
+                    Revendre sur le marché
+                  </button>
+                ))
+              )}
             </article>
           ))
         ) : (
@@ -769,7 +907,48 @@ function Transport({
       </div>
       <h3>Marché international des véhicules</h3>
       <div className="usedMarket">
-        {market.filter(listing=>listing.seller.id!==company.id).length ? market.filter(listing=>listing.seller.id!==company.id).map(listing=><article key={listing.id}><img src={vehicleImage(listing.vehicle.model)} alt={listing.vehicle.model}/><div><small>{listing.seller.name} · {listing.seller.headquarters}</small><h3>{listing.vehicle.model}</h3><p>{listing.vehicle.registration} · {Number(listing.vehicle.mileageKm).toLocaleString("fr-FR")} km · état {listing.vehicle.condition}%</p><dl><span>Valeur estimée <b>{money(listing.currentValueCents)}</b></span><span>Prix vendeur <strong>{money(listing.askingPriceCents)}</strong></span></dl><button disabled={buyUsed.isPending} onClick={()=>buyUsed.mutate(listing.id)}>Acheter ce véhicule</button></div></article>) : <div className="emptyFleet">Aucun véhicule proposé actuellement par une autre entreprise.</div>}
+        {market.filter((listing) => listing.seller.id !== company.id).length ? (
+          market
+            .filter((listing) => listing.seller.id !== company.id)
+            .map((listing) => (
+              <article key={listing.id}>
+                <img
+                  src={vehicleImage(listing.vehicle.model)}
+                  alt={listing.vehicle.model}
+                />
+                <div>
+                  <small>
+                    {listing.seller.name} · {listing.seller.headquarters}
+                  </small>
+                  <h3>{listing.vehicle.model}</h3>
+                  <p>
+                    {listing.vehicle.registration} ·{" "}
+                    {Number(listing.vehicle.mileageKm).toLocaleString("fr-FR")}{" "}
+                    km · état {listing.vehicle.condition}%
+                  </p>
+                  <dl>
+                    <span>
+                      Valeur estimée <b>{money(listing.currentValueCents)}</b>
+                    </span>
+                    <span>
+                      Prix vendeur{" "}
+                      <strong>{money(listing.askingPriceCents)}</strong>
+                    </span>
+                  </dl>
+                  <button
+                    disabled={buyUsed.isPending}
+                    onClick={() => buyUsed.mutate(listing.id)}
+                  >
+                    Acheter ce véhicule
+                  </button>
+                </div>
+              </article>
+            ))
+        ) : (
+          <div className="emptyFleet">
+            Aucun véhicule proposé actuellement par une autre entreprise.
+          </div>
+        )}
       </div>
       {active.length > 0 && (
         <>
@@ -871,6 +1050,273 @@ function WorldMap({ shipments }: { shipments: Shipment[] }) {
     >
       <IndustrialMap3D shipments={shipments} />
     </Suspense>
+  );
+}
+const factoryEquipment = [
+  {
+    kind: "ASSEMBLY_LINE",
+    name: "Ligne automobile",
+    price: 50_000_000,
+    detail: "Châssis, peinture et assemblage final",
+  },
+  {
+    kind: "ELECTRONICS_LINE",
+    name: "Ligne électronique",
+    price: 25_000_000,
+    detail: "Montage de cartes et ordinateurs",
+  },
+  {
+    kind: "WOODWORK_LINE",
+    name: "Atelier mobilier CNC",
+    price: 12_000_000,
+    detail: "Découpe et assemblage du mobilier",
+  },
+  {
+    kind: "ROBOTICS",
+    name: "Cellules robotisées",
+    price: 40_000_000,
+    detail: "Cadence de toutes les lignes +50 %",
+  },
+] as const;
+const factoryRecipes = [
+  {
+    type: "VEHICLE",
+    name: "Véhicule Industrium",
+    equipment: "ASSEMBLY_LINE",
+    unitCost: 1_800_000,
+    staff: 3,
+    time: "45 s/u",
+  },
+  {
+    type: "COMPUTER",
+    name: "Ordinateur professionnel",
+    equipment: "ELECTRONICS_LINE",
+    unitCost: 45_000,
+    staff: 2,
+    time: "15 s/u",
+  },
+  {
+    type: "FURNITURE",
+    name: "Mobilier de bureau",
+    equipment: "WOODWORK_LINE",
+    unitCost: 22_000,
+    staff: 1,
+    time: "20 s/u",
+  },
+] as const;
+function FactoryManagement({
+  company,
+  factory,
+}: {
+  company: Company;
+  factory: FactoryData;
+}) {
+  const qc = useQueryClient();
+  const [quantity, setQuantity] = useState(1);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const refresh = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ["factory", company.id] }),
+      qc.invalidateQueries({ queryKey: ["companies"] }),
+    ]);
+  const equipment = useMutation({
+    mutationFn: (kind: string) =>
+      api(`/factories/${factory.id}/equipment`, {
+        method: "POST",
+        body: JSON.stringify({ companyId: company.id, kind }),
+      }),
+    onSuccess: refresh,
+  });
+  const upgrade = useMutation({
+    mutationFn: () =>
+      api(`/factories/${factory.id}/upgrade`, {
+        method: "POST",
+        body: JSON.stringify({ companyId: company.id }),
+      }),
+    onSuccess: refresh,
+  });
+  const produce = useMutation({
+    mutationFn: (productType: string) =>
+      api(`/factories/${factory.id}/produce`, {
+        method: "POST",
+        body: JSON.stringify({ companyId: company.id, productType, quantity }),
+      }),
+    onSuccess: refresh,
+  });
+  const payroll = useMutation({
+    mutationFn: () =>
+      api(`/companies/${company.id}/payroll`, { method: "POST" }),
+    onSuccess: refresh,
+  });
+  const error =
+    equipment.error || upgrade.error || produce.error || payroll.error;
+  const staff = factory.baseStaff + factory.employees.length;
+  return (
+    <section className="factoryPage">
+      <div className="factoryHero">
+        <div>
+          <small>UNITÉ DE PRODUCTION · {factory.city}</small>
+          <h2>{factory.name}</h2>
+          <p>
+            Gérez les investissements, le personnel et les cycles de
+            fabrication.
+          </p>
+        </div>
+        <div className="factoryLevel">
+          <span>NIVEAU</span>
+          <b>{factory.level}</b>
+          <button disabled={upgrade.isPending} onClick={() => upgrade.mutate()}>
+            Améliorer · {money(factory.level * 20_000_000)}
+          </button>
+        </div>
+      </div>
+      {error && <p className="error">{error.message}</p>}
+      <div className="factoryMetrics">
+        <Card
+          label="Personnel disponible"
+          value={String(staff)}
+          delta={`${factory.employees.length} salarié(s) + équipe dirigeante`}
+        />
+        <Card
+          label="Masse salariale"
+          value={money(factory.payrollCents)}
+          delta="par mois"
+        />
+        <Card
+          label="Machines installées"
+          value={String(factory.equipment.length)}
+          delta={`Niveau usine ${factory.level}`}
+        />
+      </div>
+      <div className="factoryColumns">
+        <div>
+          <h3>Catalogue d’équipements</h3>
+          <div className="equipmentGrid">
+            {factoryEquipment.map((item) => {
+              const owned = factory.equipment.some((e) => e.kind === item.kind);
+              return (
+                <article className={owned ? "owned" : ""} key={item.kind}>
+                  <span>{owned ? "INSTALLÉ" : "INVESTISSEMENT"}</span>
+                  <h4>{item.name}</h4>
+                  <p>{item.detail}</p>
+                  <b>{money(item.price)}</b>
+                  <button
+                    disabled={owned || equipment.isPending}
+                    onClick={() => equipment.mutate(item.kind)}
+                  >
+                    {owned ? "En service" : "Acheter et installer"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+        <div className="workforce">
+          <h3>Personnel et salaires</h3>
+          <div className="staffBase">
+            <b>Équipe dirigeante</b>
+            <span>2 personnes opérationnelles</span>
+          </div>
+          {factory.employees.map((employee) => (
+            <div className="employeeLine" key={employee.id}>
+              <span className="candidateAvatar">
+                {employee.user.displayName[0]}
+              </span>
+              <div>
+                <b>{employee.user.displayName}</b>
+                <small>{employee.jobOffer.title}</small>
+              </div>
+              <strong>{money(employee.salaryCents)}</strong>
+            </div>
+          ))}
+          {!factory.employees.length && (
+            <p>
+              Publiez des offres dans l’onglet Emplois pour recruter des
+              joueurs.
+            </p>
+          )}
+          <button
+            disabled={!factory.employees.length || payroll.isPending}
+            onClick={() => payroll.mutate()}
+          >
+            Payer les salaires · {money(factory.payrollCents)}
+          </button>
+        </div>
+      </div>
+      <h3>Lancer une production</h3>
+      <div className="productionControls">
+        <label>
+          Quantité
+          <input
+            type="number"
+            min="1"
+            max="100"
+            value={quantity}
+            onChange={(event) =>
+              setQuantity(Math.max(1, Number(event.target.value)))
+            }
+          />
+        </label>
+        {factoryRecipes.map((recipe) => {
+          const ready =
+            factory.equipment.some((item) => item.kind === recipe.equipment) &&
+            staff >= recipe.staff;
+          return (
+            <article key={recipe.type}>
+              <small>
+                {recipe.time} · {recipe.staff} employés requis
+              </small>
+              <h3>{recipe.name}</h3>
+              <p>Coût : {money(recipe.unitCost * quantity)}</p>
+              <button
+                disabled={!ready || produce.isPending}
+                onClick={() => produce.mutate(recipe.type)}
+              >
+                {ready
+                  ? `Fabriquer ${quantity} unité(s)`
+                  : !factory.equipment.some(
+                        (item) => item.kind === recipe.equipment,
+                      )
+                    ? "Machine requise"
+                    : "Personnel insuffisant"}
+              </button>
+            </article>
+          );
+        })}
+      </div>
+      <h3>Ordres de fabrication</h3>
+      <div className="productionOrders">
+        {factory.productionOrders.length ? (
+          factory.productionOrders.map((order) => {
+            const remaining = Math.max(
+              0,
+              new Date(order.completesAt).getTime() - now,
+            );
+            return (
+              <article key={order.id}>
+                <div>
+                  <small>{order.productType}</small>
+                  <b>
+                    {order.quantity} × {order.productName}
+                  </b>
+                </div>
+                <span className={order.status.toLowerCase()}>
+                  {order.status === "COMPLETED"
+                    ? "Stocké dans l’entrepôt"
+                    : `Production · ${Math.floor(remaining / 60000)}m ${String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0")}s`}
+                </span>
+              </article>
+            );
+          })
+        ) : (
+          <div className="emptyFleet">Aucune fabrication lancée.</div>
+        )}
+      </div>
+    </section>
   );
 }
 function Jobs({ data, company }: { data: Job[]; company: Company }) {

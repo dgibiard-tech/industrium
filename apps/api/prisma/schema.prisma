@@ -62,6 +62,15 @@ enum ShipmentStatus {
   IN_TRANSIT
   DELIVERED
 }
+enum ProductionStatus {
+  RUNNING
+  COMPLETED
+}
+enum FactoryProduct {
+  VEHICLE
+  COMPUTER
+  FURNITURE
+}
 model User {
   id String @id @default(cuid())
   email String @unique
@@ -101,6 +110,7 @@ model Company {
   vehicleListings VehicleMarketListing[] @relation("vehicleSeller")
   vehiclePurchases VehicleMarketListing[] @relation("vehicleBuyer")
   shipments Shipment[] @relation("carrier")
+  factories Factory[]
 }
 model Vehicle {
   id String @id @default(cuid())
@@ -133,6 +143,42 @@ model VehicleMarketListing {
   createdAt DateTime @default(now())
   soldAt DateTime?
   @@index([status, createdAt])
+}
+model Factory {
+  id String @id @default(cuid())
+  name String
+  city String
+  level Int @default(1)
+  companyId String
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  equipment FactoryEquipment[]
+  productionOrders ProductionOrder[]
+  createdAt DateTime @default(now())
+}
+model FactoryEquipment {
+  id String @id @default(cuid())
+  kind String
+  name String
+  condition Int @default(100)
+  purchasePriceCents BigInt
+  factoryId String
+  factory Factory @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  purchasedAt DateTime @default(now())
+  @@unique([factoryId, kind])
+}
+model ProductionOrder {
+  id String @id @default(cuid())
+  productType FactoryProduct
+  productName String
+  quantity Int
+  unitCostCents BigInt
+  status ProductionStatus @default(RUNNING)
+  factoryId String
+  factory Factory @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  startedAt DateTime @default(now())
+  completesAt DateTime
+  completedAt DateTime?
+  @@index([status, completesAt])
 }
 model Shipment {
   id String @id @default(cuid())
@@ -290,6 +336,7 @@ model EmployeeContract {
   jobOfferId String
   jobOffer JobOffer @relation(fields: [jobOfferId], references: [id])
   createdAt DateTime @default(now())
+  lastSalaryPaidAt DateTime?
   @@unique([userId, jobOfferId])
 }
 model Notification {

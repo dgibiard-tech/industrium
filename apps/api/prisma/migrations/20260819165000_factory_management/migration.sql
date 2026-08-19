@@ -1,0 +1,12 @@
+CREATE TYPE "ProductionStatus" AS ENUM ('RUNNING', 'COMPLETED');
+CREATE TYPE "FactoryProduct" AS ENUM ('VEHICLE', 'COMPUTER', 'FURNITURE');
+ALTER TABLE "EmployeeContract" ADD COLUMN "lastSalaryPaidAt" TIMESTAMP(3);
+CREATE TABLE "Factory" ("id" TEXT NOT NULL,"name" TEXT NOT NULL,"city" TEXT NOT NULL,"level" INTEGER NOT NULL DEFAULT 1,"companyId" TEXT NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "Factory_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "FactoryEquipment" ("id" TEXT NOT NULL,"kind" TEXT NOT NULL,"name" TEXT NOT NULL,"condition" INTEGER NOT NULL DEFAULT 100,"purchasePriceCents" BIGINT NOT NULL,"factoryId" TEXT NOT NULL,"purchasedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "FactoryEquipment_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "ProductionOrder" ("id" TEXT NOT NULL,"productType" "FactoryProduct" NOT NULL,"productName" TEXT NOT NULL,"quantity" INTEGER NOT NULL,"unitCostCents" BIGINT NOT NULL,"status" "ProductionStatus" NOT NULL DEFAULT 'RUNNING',"factoryId" TEXT NOT NULL,"startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"completesAt" TIMESTAMP(3) NOT NULL,"completedAt" TIMESTAMP(3),CONSTRAINT "ProductionOrder_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "FactoryEquipment_factoryId_kind_key" ON "FactoryEquipment"("factoryId","kind");
+CREATE INDEX "ProductionOrder_status_completesAt_idx" ON "ProductionOrder"("status","completesAt");
+ALTER TABLE "Factory" ADD CONSTRAINT "Factory_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "FactoryEquipment" ADD CONSTRAINT "FactoryEquipment_factoryId_fkey" FOREIGN KEY ("factoryId") REFERENCES "Factory"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ProductionOrder" ADD CONSTRAINT "ProductionOrder_factoryId_fkey" FOREIGN KEY ("factoryId") REFERENCES "Factory"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+INSERT INTO "Factory" ("id","name","city","companyId") SELECT 'factory_' || "id", 'Usine principale', "headquarters", "id" FROM "Company";
