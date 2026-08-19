@@ -1,7 +1,8 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, lazy, Suspense, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, money } from "./api";
 import { useSession } from "./store";
+const IndustrialMap3D=lazy(()=>import("./IndustrialMap3D"));
 type Company = {
   id: string;
   name: string;
@@ -33,7 +34,7 @@ type Job = {
   company: { name: string };
 };
 type Vehicle = { id:string; registration:string; model:string; type:string; capacityKg:string; mileageKm:string; condition:number; status:"AVAILABLE"|"ASSIGNED"|"MAINTENANCE" };
-type Shipment = { id:string; reference:string; cargoName:string; weightKg:string; originCity:string; destinationCity:string; distanceKm:number; rewardCents:string; status:"OPEN"|"ASSIGNED"|"IN_TRANSIT"|"DELIVERED"; progressPercent:number; carrier?:{name:string}; vehicle?:Vehicle };
+export type Shipment = { id:string; reference:string; cargoName:string; weightKg:string; originCity:string; destinationCity:string; distanceKm:number; rewardCents:string; status:"OPEN"|"ASSIGNED"|"IN_TRANSIT"|"DELIVERED"; progressPercent:number; carrier?:{name:string}; vehicle?:Vehicle };
 const nav = [
   "Vue d’ensemble",
   "Marché mondial",
@@ -495,10 +496,7 @@ function Transport({company,vehicles,shipments}:{company:Company;vehicles:Vehicl
   const error=buy.error||assign.error||advance.error;
   return <section className="transportPage"><div className="fleetHeader"><div><small>DIVISION LOGISTIQUE</small><h2>Centre de transport</h2><p>Gérez votre flotte et exécutez des contrats de fret en temps réel.</p></div><button onClick={()=>buy.mutate()} disabled={buy.isPending}>+ Acheter un Atlas TX 480 · 125 000 €</button></div><div className="transportMetrics"><Card label="Véhicules" value={String(vehicles.length)} delta={`${available.length} disponible(s)`}/><Card label="Missions actives" value={String(active.length)} delta="Opérations en cours"/><Card label="Contrats ouverts" value={String(open.length)} delta="Marché européen"/></div>{error&&<p className="error">{error.message}</p>}<h3>Flotte de l’entreprise</h3><div className="vehicleRow">{vehicles.length?vehicles.map(v=><article className="vehicleCard" key={v.id}><div className="truckVisual"><span>▰</span><i>● ●</i></div><small>{v.registration}</small><h3>{v.model}</h3><p>{v.type} · {Number(v.capacityKg)/1000} t</p><div className="condition"><span style={{width:`${v.condition}%`}}></span></div><footer><b>{v.condition}% état</b><em className={v.status.toLowerCase()}>{v.status}</em></footer></article>):<div className="emptyFleet">Aucun véhicule. Achetez votre premier camion pour accepter une mission.</div>}</div>{active.length>0&&<><h3>Convois en cours</h3><div className="activeConvoys">{active.map(s=><article key={s.id}><div><small>{s.reference} · {s.vehicle?.registration}</small><b>{s.originCity} → {s.destinationCity}</b><span>{s.cargoName} · {Number(s.weightKg)/1000} t</span></div><div className="routeProgress"><i style={{width:`${s.progressPercent}%`}}></i><span>{s.progressPercent}%</span></div><button disabled={advance.isPending} onClick={()=>advance.mutate(s.id)}>{s.progressPercent===75?"Confirmer la livraison":"Avancer de 25%"}</button></article>)}</div></>}<h3>Bourse de fret</h3><div className="missionGrid">{open.map(s=>{const truck=available.find(v=>Number(v.capacityKg)>=Number(s.weightKg));return <article className="missionCard" key={s.id}><div className="missionRef"><small>{s.reference}</small><b>{money(s.rewardCents)}</b></div><h3>{s.originCity} <span>→</span> {s.destinationCity}</h3><p>{s.cargoName}</p><dl><div><dt>Distance</dt><dd>{s.distanceKm.toLocaleString("fr-FR")} km</dd></div><div><dt>Charge</dt><dd>{Number(s.weightKg)/1000} t</dd></div></dl><button disabled={!truck||assign.isPending} onClick={()=>truck&&assign.mutate({shipmentId:s.id,vehicleId:truck.id})}>{truck?`Accepter avec ${truck.registration}`:"Aucun camion compatible"}</button></article>})}</div></section>
 }
-function WorldMap({shipments}:{shipments:Shipment[]}){
-  const active=shipments.filter(s=>s.status==="IN_TRANSIT"||s.status==="ASSIGNED");
-  return <section className="mapPage"><div className="mapToolbar"><div><small>RÉSEAU EUROPÉEN</small><h2>Carte des opérations</h2></div><div><span className="legend orange"></span> Convoi actif <span className="legend white"></span> Hub logistique</div></div><div className="europeMap"><div className="mapGrid"></div><span className="city paris">PARIS<i></i></span><span className="city lyon">LYON<i></i></span><span className="city berlin">BERLIN<i></i></span><span className="city gdansk">GDAŃSK<i></i></span><span className="city turin">TURIN<i></i></span><span className="city grenoble">GRENOBLE<i></i></span><div className="route routeOne"></div><div className="route routeTwo"></div>{active.map((s,index)=><div key={s.id} className={`movingTruck truck${index%2}`}><b>▰</b><span>{s.reference}<small>{s.progressPercent}% · {s.destinationCity}</small></span></div>)}<div className="mapPanel"><small>SITUATION RÉSEAU</small><strong>{active.length} convois actifs</strong><span>{shipments.filter(s=>s.status==="OPEN").length} contrats disponibles</span><span>Trafic européen fluide</span></div></div></section>
-}
+function WorldMap({shipments}:{shipments:Shipment[]}){return <Suspense fallback={<div className="empty">Initialisation du monde 3D…</div>}><IndustrialMap3D shipments={shipments}/></Suspense>}
 function Jobs({ data }: { data: Job[] }) {
   const qc = useQueryClient();
   const apply = useMutation({
