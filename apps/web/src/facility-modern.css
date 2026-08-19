@@ -18,7 +18,7 @@
 .smartModules button span { color:#677781; font-size:7px; }
 .smartModules button.active { color:white; border-color:#24a9c9; background:#17323d; }.smartModules button.active i { background:#39d2f3; box-shadow:0 0 10px #39d2f3; }.smartModules button.active span { color:#70db91; }
 .smartModules button.module1.active,.smartModules button.module4.active{border-color:#c35cff}.smartModules button.module1.active i,.smartModules button.module4.active i{background:#c35cff;box-shadow:0 0 10px #c35cff}.smartModules button.module2.active,.smartModules button.module3.active{border-color:#76dd62}.smartModules button.module2.active i,.smartModules button.module3.active i{background:#76dd62;box-shadow:0 0 10px #76dd62}
-.facilityConsole { position:absolute; z-index:4; right:18px; bottom:18px; width:min(440px,calc(100% - 36px)); background:#0b141bea; border:1px solid #39748b; border-top:3px solid #22bee7; padding:15px; box-shadow:0 20px 55px #000b; backdrop-filter:blur(12px); }
+.facilityConsole { position:absolute; z-index:4; right:18px; bottom:18px; width:min(560px,calc(100% - 36px)); background:#0b141bea; border:1px solid #39748b; border-top:3px solid #22bee7; padding:15px; box-shadow:0 20px 55px #000b; backdrop-filter:blur(12px); }
 .facilityConsole>small { color:#41d0f2; font-size:8px; letter-spacing:1.7px; font-weight:800; }
 .facilityTabs { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin:10px 0; }
 .facilityTabs button { padding:8px 4px; border:1px solid #344852; background:#17242b; color:#8fa2ac; font-size:8px; cursor:pointer; }
@@ -30,4 +30,11 @@
 .facilityStatus em { color:#72df91; font-size:8px; font-style:normal; }
 .statusOrb { width:13px; height:13px; border-radius:50%; background:#20c9f2; box-shadow:0 0 14px currentColor; }
 .statusOrb.color1 { background:#c35cff; }.statusOrb.color2 { background:#ff8a24; }.statusOrb.color3 { background:#76dd62; }
-@media(max-width:900px){.smartModules{grid-template-columns:1fr 1fr}.smartModules>div{grid-column:1/-1;grid-row:auto}}@media(max-width:650px){.facilityConsole{right:10px;bottom:105px;width:calc(100% - 20px)}.facilityTabs{grid-template-columns:1fr 1fr}.facilityConsole .facilityStatus{padding:7px}.smartModules{grid-template-columns:1fr}}
+.operationsTerminal { margin-top:12px; padding-top:10px; border-top:1px solid #29404b; }
+.operationsTerminal>small { color:#ef913f; font-size:8px; letter-spacing:1.5px; font-weight:800; }
+.operationsTerminal>div { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-top:8px; }
+.operationsTerminal button { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:1px 7px; text-align:left; padding:8px; color:#e2e9ec; background:linear-gradient(145deg,#17262e,#111c22); border:1px solid #334b57; cursor:pointer; }
+.operationsTerminal button:hover { border-color:#31c8eb; background:#183743; transform:translateY(-1px); }
+.operationsTerminal button i { grid-row:span 2; width:24px; height:24px; display:grid; place-items:center; color:#44d3f4; background:#0c171d; border:1px solid #31515e; font-style:normal; }
+.operationsTerminal button span { font-size:9px; font-weight:800; }.operationsTerminal button em { color:#667a84; font-size:6px; font-style:normal; }
+@media(max-width:900px){.smartModules{grid-template-columns:1fr 1fr}.smartModules>div{grid-column:1/-1;grid-row:auto}}@media(max-width:650px){.facilityConsole{right:10px;bottom:105px;width:calc(100% - 20px);max-height:335px;overflow:auto}.facilityTabs{grid-template-columns:1fr 1fr}.facilityConsole .facilityStatus{padding:7px}.operationsTerminal>div{grid-template-columns:1fr 1fr}.smartModules{grid-template-columns:1fr}}

@@ -450,8 +450,10 @@ function addInterior(scene: THREE.Scene, interior: NonNullable<Interior>) {
 
 export default function IndustrialMap3D({
   shipments,
+  onNavigate,
 }: {
   shipments: Shipment[];
+  onNavigate: (tab: string) => void;
 }) {
   const mount = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<Selection>(null);
@@ -681,6 +683,15 @@ export default function IndustrialMap3D({
                 <i className={`statusOrb color${activeZone}`} />
                 <div><b>{["Opérationnel", "Automatique", "Contrôle actif", "Optimisé"][activeZone]}</b><span>{["Cadence nominale 94 %", "18 unités connectées", "Défauts détectés 0,3 %", "Économie actuelle 21 %"][activeZone]}</span></div>
                 <em>EN LIGNE</em>
+              </div>
+              <div className="operationsTerminal">
+                <small>TERMINAL DE GESTION</small>
+                <div>
+                  {(interior.kind === "factory"
+                    ? [["Usines","Production"],["Commandes","Commandes"],["Stocks","Matières"],["Emplois","Personnel"],["Transport","Expéditions"],["Marché mondial","Marché"]]
+                    : [["Stocks","Inventaire"],["Commandes","Commandes"],["Marché mondial","Marché"],["Transport","Quais"],["Usines","Production"],["Emplois","Personnel"]]
+                  ).map(([tab,label],index)=><button key={tab} onClick={()=>onNavigate(tab)}><i>{["▦","≡","◈","⇄","⚙","♟"][index]}</i><span>{label}</span><em>OUVRIR →</em></button>)}
+                </div>
               </div>
             </div>
           </>

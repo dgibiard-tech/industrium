@@ -317,7 +317,7 @@ function Game() {
             market={vehicleMarket.data ?? []}
           />
         ) : tab === "Carte" ? (
-          <WorldMap shipments={shipments.data ?? []} />
+          <WorldMap shipments={shipments.data ?? []} onNavigate={setTab} />
         ) : (
           <Dashboard
             company={company}
@@ -1106,12 +1106,12 @@ function Transport({
     </section>
   );
 }
-function WorldMap({ shipments }: { shipments: Shipment[] }) {
+function WorldMap({ shipments,onNavigate }: { shipments: Shipment[];onNavigate:(tab:string)=>void }) {
   return (
     <Suspense
       fallback={<div className="empty">Initialisation du monde 3D…</div>}
     >
-      <IndustrialMap3D shipments={shipments} />
+      <IndustrialMap3D shipments={shipments} onNavigate={onNavigate} />
     </Suspense>
   );
 }
