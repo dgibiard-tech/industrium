@@ -340,6 +340,7 @@ function Game() {
   );
 }
 const gameUpdates=[
+  {title:"Immersion intérieure 360° corrigée",items:["Nouveaux panoramas fermés pour l’usine et l’entrepôt","Siège social désormais entièrement panoramique","Suppression des vues extérieures et des images planes","Continuité du plafond, du sol et des murs dans toutes les directions"]},
   {title:"Garage professionnel et renouvellement de flotte",items:["Reprise immédiate de chaque camion disponible","Trois offres de garages selon le véhicule","Achat par lots de 2 à 20 camions","Remises automatiques jusqu’à 12 %"]},
   {title:"Refonte structurelle de la carte 3D",items:["Terrain continu sans contour rectangulaire artificiel","Routes courbes d’un seul tenant sans cassures","Rond-point réellement connecté et quatre accès régionaux","Accotements, marquages, glissières et relief détaillés"]},
   {title:"Centrale solaire industrielle",items:["Installation photovoltaïque achetable pour chaque usine","Production électrique en temps réel selon l’heure","Autoconsommation, économies mensuelles et CO₂ évité","Parc solaire agrandi automatiquement avec les niveaux"]},

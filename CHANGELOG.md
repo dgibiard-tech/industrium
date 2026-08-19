@@ -2,6 +2,14 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Immersion intérieure 360° corrigée
+
+- Création de trois nouveaux panoramas photoréalistes entièrement fermés.
+- Remplacement des arrière-plans de l'usine et de l'entrepôt sans vue extérieure.
+- Transformation du siège social en environnement panoramique 360° complet.
+- Suppression de l'ancienne image plane et des murs artificiels qui coupaient le décor.
+- Ajout de réflexions lumineuses cohérentes avec chaque environnement intérieur.
+
 ## 19 août 2026 — Garage professionnel et renouvellement de flotte
 
 - Ajout de trois offres de reprise immédiate pour chaque camion disponible.
