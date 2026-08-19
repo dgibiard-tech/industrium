@@ -2,6 +2,15 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Bilan de flotte et fret longue distance
+
+- Ajout d'un inventaire complet des missions de transport terminées.
+- Ajout du revenu total de la flotte, de la distance livrée et du revenu moyen par mission.
+- Nouveau classement détaillé par camion avec livraisons, chiffre d'affaires et kilomètres.
+- Nouveau registre filtrable indiquant la date, le trajet, la cargaison et le véhicule de chaque livraison.
+- Ajout quotidien de 12 offres internationales longue distance entre 2 180 et 3 660 km.
+- Rémunérations supérieures adaptées aux grands trajets et badge dédié dans la bourse de fret.
+
 ## 19 août 2026 — Tour de contrôle des commandes
 
 - Refonte approfondie de la page Commandes avec recherche, filtres et tri.

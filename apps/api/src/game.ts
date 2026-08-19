@@ -27,6 +27,7 @@ const companyView={account:true,warehouses:{include:{stocks:{include:{product:tr
 const ACCELERATION_GEM_COST=10;
 const DAILY_TRANSPORT_TARGET=30;
 const logisticsRoutes=[['Paris','Lyon',465],['Lyon','Berlin',1050],['Marseille','Barcelone',505],['Lille','Amsterdam',290],['Bordeaux','Madrid',690],['Strasbourg','Munich',360],['Nantes','Bruxelles',590],['Grenoble','Turin',325],['Duisbourg','Lyon',780],['Gdańsk','Paris',1540],['Milan','Zurich',280],['Prague','Vienne',335]] as const;
+const longDistanceRoutes=[['Lisbonne','Varsovie',3120],['Oslo','Madrid',3030],['Helsinki','Rome',2990],['Dublin','Athènes',3540],['Stockholm','Lisbonne',3660],['Tallinn','Barcelone',3140],['Bucarest','Rotterdam',2240],['Naples','Copenhague',2380],['Sofia','Paris',2180],['Riga','Marseille',2590],['Istanbul','Berlin',2200],['Casablanca','Amsterdam',2730]] as const;
 const logisticsCargo=[['Composants électroniques',3200],['Batteries industrielles',10500],['Mobilier professionnel',6800],['Pièces automobiles',14200],['Équipements médicaux',2400],['Acier usiné',22000],['Ordinateurs professionnels',1800],['Machines-outils',11800]] as const;
 const cityCountries:Record<string,{country:string;code:string}>={Paris:{country:'France',code:'FR'},Lyon:{country:'France',code:'FR'},Marseille:{country:'France',code:'FR'},Lille:{country:'France',code:'FR'},Bordeaux:{country:'France',code:'FR'},Strasbourg:{country:'France',code:'FR'},Nantes:{country:'France',code:'FR'},Grenoble:{country:'France',code:'FR'},Berlin:{country:'Allemagne',code:'DE'},Duisbourg:{country:'Allemagne',code:'DE'},Munich:{country:'Allemagne',code:'DE'},Gdańsk:{country:'Pologne',code:'PL'},Turin:{country:'Italie',code:'IT'},Milan:{country:'Italie',code:'IT'},Barcelone:{country:'Espagne',code:'ES'},Madrid:{country:'Espagne',code:'ES'},Amsterdam:{country:'Pays-Bas',code:'NL'},Bruxelles:{country:'Belgique',code:'BE'},Zurich:{country:'Suisse',code:'CH'},Prague:{country:'Tchéquie',code:'CZ'},Vienne:{country:'Autriche',code:'AT'}};
 const originForCity=(city:string)=>cityCountries[city]??{country:'Europe',code:'EU'};
@@ -46,6 +47,12 @@ export class GameService {
       const dateKey=day.toISOString().slice(0,10).replaceAll('-',''),reference=`NET-${dateKey}-${String(index+1).padStart(2,'0')}`;
       const weight=Math.min(cargo[1]+(index%4)*350,24000);
       await this.db.shipment.upsert({where:{reference},update:{},create:{reference,cargoName:cargo[0],weightKg:weight,originCity:route[0],destinationCity:route[1],distanceKm:route[2],rewardCents:BigInt(Math.round(route[2]*165+weight*4.5))}});
+    }
+    for(let index=0;index<longDistanceRoutes.length;index++){
+      const route=longDistanceRoutes[index],cargo=logisticsCargo[(index*5+1)%logisticsCargo.length];
+      const dateKey=day.toISOString().slice(0,10).replaceAll('-',''),reference=`LONG-${dateKey}-${String(index+1).padStart(2,'0')}`;
+      const weight=Math.min(cargo[1]+(index%5)*500,24000);
+      await this.db.shipment.upsert({where:{reference},update:{},create:{reference,cargoName:cargo[0],weightKg:weight,originCity:route[0],destinationCity:route[1],distanceKm:route[2],rewardCents:BigInt(Math.round(route[2]*205+weight*5.5))}});
     }
   }
   products(){return this.db.product.findMany({orderBy:{name:'asc'}})}

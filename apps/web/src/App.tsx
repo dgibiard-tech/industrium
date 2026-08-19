@@ -112,6 +112,7 @@ export type Shipment = {
   progressPercent: number;
   acceptedAt?: string;
   arrivesAt?: string;
+  deliveredAt?: string;
   carrier?: { name: string };
   vehicle?: Vehicle;
 };
@@ -338,6 +339,7 @@ function Game() {
   );
 }
 const gameUpdates=[
+  {title:"Bilan de flotte et fret longue distance",items:["Inventaire complet des missions livrées","Revenus, kilomètres et moyenne par transport","Résultats détaillés pour chaque camion de la flotte","12 nouvelles liaisons internationales de 2 180 à 3 660 km chaque jour"]},
   {title:"Tour de contrôle des commandes",items:["Recherche, filtres et tri avancés","Indicateurs commerciaux et graphique des flux","Fiches détaillées avec facture, taxes et traçabilité"]},
   {title:"Défilement complet de l’interface",items:["Barres de défilement sur toutes les pages principales","Listes, terminaux et fenêtres 3D désormais défilables","Style industriel et adaptation mobile"]},
   {title:"Intérieurs industriels photoréalistes 360°",items:["Usines et entrepôts entièrement redessinés","Décors continus dans toutes les directions","Machines, racks, quais et zones de sécurité plus réalistes"]},
@@ -673,6 +675,7 @@ function Transport({
   const [now, setNow] = useState(Date.now());
   const [selling, setSelling] = useState<string | null>(null);
   const [salePrice, setSalePrice] = useState("");
+  const [historyVehicle, setHistoryVehicle] = useState("ALL");
   const network = useQuery({
     queryKey: ["fleet-network", company.id],
     queryFn: () =>
@@ -768,6 +771,47 @@ function Transport({
     (s) => s.carrier?.name === company.name && s.status !== "DELIVERED",
   );
   const open = shipments.filter((s) => s.status === "OPEN");
+  const completed = shipments.filter(
+    (s) => s.carrier?.name === company.name && s.status === "DELIVERED",
+  );
+  const totalFleetRevenue = completed.reduce(
+    (sum, shipment) => sum + Number(shipment.rewardCents),
+    0,
+  );
+  const completedDistance = completed.reduce(
+    (sum, shipment) => sum + shipment.distanceKm,
+    0,
+  );
+  const truckResults = vehicles
+    .map((vehicle) => {
+      const missions = completed.filter(
+        (shipment) => shipment.vehicle?.id === vehicle.id,
+      );
+      const revenue = missions.reduce(
+        (sum, shipment) => sum + Number(shipment.rewardCents),
+        0,
+      );
+      return {
+        vehicle,
+        missions,
+        revenue,
+        distance: missions.reduce(
+          (sum, shipment) => sum + shipment.distanceKm,
+          0,
+        ),
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue);
+  const visibleHistory = completed
+    .filter(
+      (shipment) =>
+        historyVehicle === "ALL" || shipment.vehicle?.id === historyVehicle,
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.deliveredAt ?? b.arrivesAt ?? 0).getTime() -
+        new Date(a.deliveredAt ?? a.arrivesAt ?? 0).getTime(),
+    );
   const error =
     buy.error ||
     assign.error ||
@@ -1003,6 +1047,56 @@ function Transport({
           </div>
         )}
       </div>
+      <section className="fleetResults">
+        <div className="fleetResultsHeader">
+          <div>
+            <small>COMPTABILITÉ LOGISTIQUE</small>
+            <h3>Inventaire des missions accomplies</h3>
+            <p>Revenus certifiés à partir des transports effectivement livrés.</p>
+          </div>
+          <span className="fleetRevenueTotal">{money(totalFleetRevenue)}</span>
+        </div>
+        <div className="fleetResultKpis">
+          <article><small>Missions terminées</small><strong>{completed.length}</strong><span>livraisons réussies</span></article>
+          <article><small>Revenu total</small><strong>{money(totalFleetRevenue)}</strong><span>chiffre d’affaires flotte</span></article>
+          <article><small>Distance livrée</small><strong>{completedDistance.toLocaleString("fr-FR")} km</strong><span>trajets accomplis</span></article>
+          <article><small>Revenu moyen</small><strong>{money(completed.length ? totalFleetRevenue / completed.length : 0)}</strong><span>par mission</span></article>
+        </div>
+        <h4>Résultats par camion</h4>
+        <div className="truckResults">
+          {truckResults.length ? truckResults.map(({vehicle, missions, revenue, distance}, index) => (
+            <article key={vehicle.id} className="truckResultCard">
+              <div className="truckResultRank">#{index + 1}</div>
+              <img src={vehicleImage(vehicle.model)} alt={vehicle.model} />
+              <div className="truckResultIdentity"><small>{vehicle.registration}</small><b>{vehicle.model}</b><span>{vehicle.status}</span></div>
+              <dl>
+                <div><dt>Missions</dt><dd>{missions.length}</dd></div>
+                <div><dt>Revenu généré</dt><dd>{money(revenue)}</dd></div>
+                <div><dt>Kilomètres livrés</dt><dd>{distance.toLocaleString("fr-FR")} km</dd></div>
+                <div><dt>Moyenne / mission</dt><dd>{money(missions.length ? revenue / missions.length : 0)}</dd></div>
+              </dl>
+            </article>
+          )) : <div className="emptyFleet">Achetez un camion pour démarrer votre bilan logistique.</div>}
+        </div>
+        <div className="missionHistoryHeader">
+          <div><h4>Registre des livraisons</h4><span>{visibleHistory.length} mission(s) affichée(s)</span></div>
+          <select value={historyVehicle} onChange={(event) => setHistoryVehicle(event.target.value)}>
+            <option value="ALL">Tous les camions</option>
+            {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration} · {vehicle.model}</option>)}
+          </select>
+        </div>
+        <div className="missionHistory">
+          {visibleHistory.length ? visibleHistory.map((shipment) => (
+            <article key={shipment.id}>
+              <div className="missionHistoryStatus"><i />LIVRÉE</div>
+              <div><small>{shipment.reference}</small><b>{shipment.originCity} → {shipment.destinationCity}</b><span>{shipment.cargoName} · {(Number(shipment.weightKg) / 1000).toLocaleString("fr-FR")} t</span></div>
+              <div><small>CAMION</small><b>{shipment.vehicle?.registration ?? "Non renseigné"}</b><span>{shipment.vehicle?.model ?? "Véhicule archivé"}</span></div>
+              <div><small>DATE DE LIVRAISON</small><b>{shipment.deliveredAt || shipment.arrivesAt ? new Date((shipment.deliveredAt ?? shipment.arrivesAt)!).toLocaleDateString("fr-FR") : "Historique"}</b><span>{shipment.distanceKm.toLocaleString("fr-FR")} km</span></div>
+              <strong>{money(shipment.rewardCents)}</strong>
+            </article>
+          )) : <div className="emptyHistory">Aucune mission terminée pour ce véhicule. Les prochaines livraisons apparaîtront automatiquement ici.</div>}
+        </div>
+      </section>
       <h3>Marché international des véhicules</h3>
       <div className="usedMarket">
         {market.filter((listing) => listing.seller.id !== company.id).length ? (
@@ -1099,7 +1193,7 @@ function Transport({
           return (
             <article className="missionCard" key={s.id}>
               <div className="missionRef">
-                <small>{s.reference}</small>
+                <small>{s.reference} {s.distanceKm >= 2000 && <em className="longHaulBadge">LONGUE DISTANCE</em>}</small>
                 <b>{money(s.rewardCents)}</b>
               </div>
               <h3>

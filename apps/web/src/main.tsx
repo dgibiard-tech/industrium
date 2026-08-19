@@ -7,4 +7,5 @@ import './warehouse-orders.css';
 import './changelog.css';
 import './scrollbars.css';
 import './order-enhanced.css';
+import './fleet-history.css';
 createRoot(document.getElementById('root')!).render(<React.StrictMode><QueryClientProvider client={new QueryClient()}><App/></QueryClientProvider></React.StrictMode>);
