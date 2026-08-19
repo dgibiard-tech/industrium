@@ -2,6 +2,13 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Intérieurs industriels photoréalistes 360°
+
+- Refonte complète du design intérieur des usines et entrepôts.
+- Nouveaux environnements panoramiques 360° visibles dans toutes les directions.
+- Machines, racks, quais, zones de sécurité et éclairages rendus plus crédibles.
+- Suppression des murs artificiels qui masquaient le décor pendant la rotation.
+
 ## 19 août 2026 — Refonte panoramique et corrections de la carte
 
 - Nouveau décor photoréaliste à 360° entourant entièrement la carte.

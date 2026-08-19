@@ -320,24 +320,18 @@ function addInterior(scene: THREE.Scene, interior: NonNullable<Interior>) {
   const animations: Array<(time: number) => void> = [];
   scene.background = new THREE.Color(0x11171a);
   scene.fog = new THREE.Fog(0x11171a, 35, 90);
-  const backdropTexture = new THREE.TextureLoader().load(
-    interior.kind === "factory"
-      ? "/assets/factory-interior-world-v3.png"
-      : interior.kind === "warehouse"
-        ? "/assets/warehouse-interior-world-v3.png"
-        : "/assets/headquarters-interior-v1.png",
-  );
-  backdropTexture.colorSpace = THREE.SRGBColorSpace;
-  const backdrop = new THREE.Mesh(
-    new THREE.PlaneGeometry(26, 14.6),
-    new THREE.MeshBasicMaterial({ map: backdropTexture, toneMapped: false }),
-  );
-  backdrop.position.set(0, 6.8, 18.15);
-  scene.add(backdrop);
+  if(interior.kind!=="headquarters"){
+    const environmentTexture=new THREE.TextureLoader().load(interior.kind==="factory"?"/assets/factory-interior-360-v4.png":"/assets/warehouse-interior-360-v4.png");
+    environmentTexture.colorSpace=THREE.SRGBColorSpace;environmentTexture.mapping=THREE.EquirectangularReflectionMapping;scene.background=environmentTexture;scene.userData.environmentTexture=environmentTexture;
+  }else{
+    const backdropTexture=new THREE.TextureLoader().load("/assets/headquarters-interior-v1.png");backdropTexture.colorSpace=THREE.SRGBColorSpace;
+    const backdrop=new THREE.Mesh(new THREE.PlaneGeometry(26,14.6),new THREE.MeshBasicMaterial({map:backdropTexture,toneMapped:false}));backdrop.position.set(0,6.8,18.15);scene.add(backdrop);
+  }
   scene.add(box(52, 0.35, 38, material(0x3b4040), 0, -0.1, 0));
-  scene.add(box(52, 13, 0.5, material(0x30373a), 0, 6.5, 18.5));
-  for (const x of [-25, 25])
-    scene.add(box(0.5, 13, 38, material(0x30373a), x, 6.5, 0));
+  if(interior.kind==="headquarters"){
+    scene.add(box(52,13,.5,material(0x30373a),0,6.5,18.5));
+    for(const x of [-25,25])scene.add(box(.5,13,38,material(0x30373a),x,6.5,0));
+  }
   for (let z = -16; z <= 16; z += 5.4) {
     scene.add(box(52, 0.24, 0.28, material(0x1c252a, 0.65), 0, 11.8, z));
   }
@@ -625,6 +619,7 @@ export default function IndustrialMap3D({
       controls.dispose();
       renderer.dispose();
       environmentTexture?.dispose();
+      const interiorTexture=scene.userData.environmentTexture as THREE.Texture|undefined;interiorTexture?.dispose();
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh) {
           object.geometry.dispose();
