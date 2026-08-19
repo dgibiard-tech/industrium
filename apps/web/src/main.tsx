@@ -1,2 +1,2 @@
-import React from 'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{App}from'./App';import'./styles.css';import'./game.css';import'./logistics.css';import'./vehicle-catalog.css';import'./jobs.css';import'./map3d.css';
+import React from 'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{App}from'./App';import'./styles.css';import'./game.css';import'./logistics.css';import'./vehicle-catalog.css';import'./jobs.css';import'./map3d.css';import'./art-direction.css';
 createRoot(document.getElementById('root')!).render(<React.StrictMode><QueryClientProvider client={new QueryClient()}><App/></QueryClientProvider></React.StrictMode>);

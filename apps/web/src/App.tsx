@@ -490,9 +490,9 @@ function Orders({ data }: { data: any[] }) {
   );
 }
 const vehicleCatalog=[
-  {id:"atlas-tx480",model:"Atlas TX 480",type:"Semi-remorque diesel",capacity:24,price:12_500_000,image:"/assets/atlas-tx480-inspection.png",range:"1 400 km",accent:"orange"},
-  {id:"voltis-e18",model:"Voltis E18",type:"Porteur électrique",capacity:12,price:9_800_000,image:"/assets/voltis-e18-inspection.png",range:"420 km",accent:"blue"},
-  {id:"nova-v6",model:"Nova V6 Urban",type:"Utilitaire électrique",capacity:3.5,price:5_900_000,image:"/assets/nova-v6-inspection.png",range:"310 km",accent:"navy"},
+  {id:"atlas-tx480",model:"Atlas TX 480",type:"Semi-remorque diesel",capacity:24,price:12_500_000,image:"/assets/atlas-tx480-world-v2.png",range:"1 400 km",accent:"orange"},
+  {id:"voltis-e18",model:"Voltis E18",type:"Porteur électrique",capacity:12,price:9_800_000,image:"/assets/voltis-e18-world-v2.png",range:"420 km",accent:"blue"},
+  {id:"nova-v6",model:"Nova V6 Urban",type:"Utilitaire électrique",capacity:3.5,price:5_900_000,image:"/assets/nova-v6-world-v2.png",range:"310 km",accent:"navy"},
 ] as const;
 const vehicleImage=(model:string)=>vehicleCatalog.find(v=>v.model===model)?.image??vehicleCatalog[0].image;
 function Transport({company,vehicles,shipments}:{company:Company;vehicles:Vehicle[];shipments:Shipment[]}){

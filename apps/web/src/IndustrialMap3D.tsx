@@ -10,7 +10,7 @@ type Selection =
   | null;
 type Interior = { kind: BuildingKind; name: string } | null;
 
-const inspectionImage = (model?: string) => model === "Voltis E18" ? "/assets/voltis-e18-inspection.png" : model === "Nova V6 Urban" ? "/assets/nova-v6-inspection.png" : "/assets/atlas-tx480-inspection.png";
+const inspectionImage = (model?: string) => model === "Voltis E18" ? "/assets/voltis-e18-world-v2.png" : model === "Nova V6 Urban" ? "/assets/nova-v6-world-v2.png" : "/assets/atlas-tx480-world-v2.png";
 
 const material = (color: number, metalness = 0.18, roughness = 0.72) =>
   new THREE.MeshStandardMaterial({ color, metalness, roughness });
