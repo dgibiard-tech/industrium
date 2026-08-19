@@ -125,9 +125,16 @@ function addExterior(scene: THREE.Scene, active: Shipment[]) {
 
 function addInterior(scene: THREE.Scene, interior: NonNullable<Interior>) {
   scene.background = new THREE.Color(0x11171a); scene.fog = new THREE.Fog(0x11171a, 35, 90);
+  const backdropTexture = new THREE.TextureLoader().load(interior.kind === "factory" ? "/assets/factory-interior-world-v2.png" : "/assets/warehouse-interior-world-v2.png");
+  backdropTexture.colorSpace = THREE.SRGBColorSpace;
+  const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(26, 14.6), new THREE.MeshBasicMaterial({ map: backdropTexture, toneMapped: false }));
+  backdrop.position.set(0, 6.8, 18.15); scene.add(backdrop);
   scene.add(box(52, 0.35, 38, material(0x3b4040), 0, -0.1, 0));
   scene.add(box(52, 13, 0.5, material(0x30373a), 0, 6.5, 18.5));
   for (const x of [-25, 25]) scene.add(box(0.5, 13, 38, material(0x30373a), x, 6.5, 0));
+  for (let z = -16; z <= 16; z += 5.4) { scene.add(box(52, 0.24, 0.28, material(0x1c252a, 0.65), 0, 11.8, z)); }
+  scene.add(box(0.16, 0.03, 36, new THREE.MeshBasicMaterial({ color: 0xd7812e }), -3.2, 0.1, 0));
+  scene.add(box(0.16, 0.03, 36, new THREE.MeshBasicMaterial({ color: 0xd7812e }), 3.2, 0.1, 0));
   for (let x = -20; x <= 20; x += 10) {
     const lamp = box(5, 0.12, 0.45, new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xdcefff, emissiveIntensity: 5 }), x, 11, 0); scene.add(lamp);
     const light = new THREE.PointLight(0xddeeff, 16, 18); light.position.set(x, 10, 0); scene.add(light);
@@ -183,7 +190,7 @@ export default function IndustrialMap3D({ shipments }: { shipments: Shipment[] }
     const resize = () => { camera.aspect = host.clientWidth / host.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(host.clientWidth, host.clientHeight); }; window.addEventListener("resize", resize);
     const clock = new THREE.Clock(); let frame = 0;
     const animate = () => { frame = requestAnimationFrame(animate); const t = clock.getElapsedTime(); if (world) world.trucks.forEach((truck, i) => { const p = ((active[i].progressPercent / 100) + t * 0.012 + i * 0.17) % 1, segment = Math.min(2, Math.floor(p * 3)), local = p * 3 - segment; truck.position.copy(world.hubs[segment]).lerp(world.hubs[segment + 1], local); truck.position.y = 0.2; truck.lookAt(world.hubs[segment + 1]); }); controls.update(); renderer.render(scene, camera); }; animate();
-    return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", resize); renderer.domElement.removeEventListener("pointerdown", pointerDown); renderer.domElement.removeEventListener("pointerup", pointerUp); controls.dispose(); renderer.dispose(); scene.traverse((object) => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); (Array.isArray(object.material) ? object.material : [object.material]).forEach((item) => item.dispose()); } }); if (renderer.domElement.parentNode === host) host.removeChild(renderer.domElement); };
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", resize); renderer.domElement.removeEventListener("pointerdown", pointerDown); renderer.domElement.removeEventListener("pointerup", pointerUp); controls.dispose(); renderer.dispose(); scene.traverse((object) => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); (Array.isArray(object.material) ? object.material : [object.material]).forEach((item) => { if (item instanceof THREE.MeshBasicMaterial && item.map) item.map.dispose(); item.dispose(); }); } }); if (renderer.domElement.parentNode === host) host.removeChild(renderer.domElement); };
   }, [activeKey, interior]);
 
   const enterBuilding = () => { if (selection?.kind === "building") { setInterior({ kind: selection.buildingKind, name: selection.name }); setSelection(null); } };
