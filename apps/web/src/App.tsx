@@ -338,6 +338,7 @@ function Game() {
   );
 }
 const gameUpdates=[
+  {title:"Refonte panoramique et corrections de la carte",items:["Nouveau décor photoréaliste à 360° autour du monde","Routes et marquages stabilisés","Suppression des sauts de véhicules et des ruptures visuelles"]},
   {title:"Réseau routier 3D et suivi GPS",items:["Routes courbes, embranchements et rond-point","Véhicules animés directement sur leur trajet","Informations détaillées pour chaque véhicule en circulation"]},
   {title:"Journal des mises à jour intégré",items:["Nouvel écran accessible dans le jeu","Historique permanent enregistré sur GitHub","Mise à jour prévue après chaque demande publiée"]},
   {title:"Stocks, commandes et siège social",items:["Centre de stocks avancé avec alertes et réservations","Suivi animé des commandes internationales","Siège social 3D avec employés et terminal de direction"]},

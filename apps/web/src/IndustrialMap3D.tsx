@@ -110,8 +110,8 @@ function addHeadquarters(scene:THREE.Scene,x:number,z:number,name:string){
 }
 
 function addRoad(scene: THREE.Scene, a: THREE.Vector3, b: THREE.Vector3) {
-  const length = a.distanceTo(b),
-    road = box(4.3, 0.12, length, material(0x24292b, 0.05, 0.9));
+  const length = a.distanceTo(b)+.35,
+    road = box(4.5, 0.12, length, material(0x24292b, 0.05, 0.9));
   road.position.copy(a).lerp(b, 0.5);
   road.lookAt(b);
   scene.add(road);
@@ -127,10 +127,12 @@ function addRoad(scene: THREE.Scene, a: THREE.Vector3, b: THREE.Vector3) {
   line.position.copy(road.position);
   line.rotation.copy(road.rotation);
   scene.add(line);
+  const direction=b.clone().sub(a).normalize(),perpendicular=new THREE.Vector3(-direction.z,0,direction.x);
+  for(const side of [-1,1]){const edge=box(.09,.145,length,new THREE.MeshBasicMaterial({color:0xe8ece8}),0,.145,0);edge.position.copy(road.position).addScaledVector(perpendicular,side*1.82);edge.rotation.copy(road.rotation);scene.add(edge)}
 }
 
 function addCurvedRoad(scene:THREE.Scene,points:THREE.Vector3[]){
-  const curve=new THREE.CatmullRomCurve3(points.map(point=>point.clone()),false,"catmullrom",.35),samples=22;
+  const curve=new THREE.CatmullRomCurve3(points.map(point=>point.clone()),false,"catmullrom",.35),samples=16;
   for(let index=0;index<samples;index++)addRoad(scene,curve.getPoint(index/samples),curve.getPoint((index+1)/samples));
   return curve;
 }
@@ -163,11 +165,6 @@ function addTree(scene: THREE.Scene, x: number, z: number, size: number) {
 
 function addWorldDetails(scene: THREE.Scene) {
   const animations: Array<(time: number) => void> = [];
-  const horizonTexture = new THREE.TextureLoader().load("/assets/industrial-valley-horizon-v1.png");
-  horizonTexture.colorSpace = THREE.SRGBColorSpace;
-  const horizon = new THREE.Mesh(new THREE.PlaneGeometry(190, 107), new THREE.MeshBasicMaterial({ map: horizonTexture, toneMapped: false }));
-  horizon.position.set(0, 31, -76);
-  scene.add(horizon);
 
   for (const [x, z, rotation] of [[-43,-22,0.1],[39,-7,-0.2],[-8,35,0.25]] as const) {
     const tower = new THREE.Mesh(new THREE.CylinderGeometry(.22,.55,12,12), material(0xdce6e8,.22,.35));
@@ -502,6 +499,8 @@ export default function IndustrialMap3D({
     if (!host) return;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x91b4ca);
+    let environmentTexture:THREE.Texture|undefined;
+    if(!interior){environmentTexture=new THREE.TextureLoader().load("/assets/industrial-valley-360-v2.png");environmentTexture.colorSpace=THREE.SRGBColorSpace;environmentTexture.mapping=THREE.EquirectangularReflectionMapping;scene.background=environmentTexture;}
     scene.fog = new THREE.FogExp2(
       interior ? 0x11171a : 0x9bb5bf,
       interior ? 0.008 : 0.0065,
@@ -606,9 +605,8 @@ export default function IndustrialMap3D({
       const t = clock.getElapsedTime();
       if (world)
         world.trucks.forEach((truck, i) => {
-          const p =
-              (active[i].progressPercent / 100 + t * 0.012) % 1,
-            route=world.routes[i%world.routes.length],next=route.getPointAt((p+.008)%1);
+          const durationSeconds=Math.max(1,(new Date(active[i].arrivesAt??Date.now()).getTime()-new Date(active[i].acceptedAt??Date.now()).getTime())/1000),p=Math.min(.998,active[i].progressPercent/100+t/durationSeconds),
+            route=world.routes[i%world.routes.length],next=route.getPointAt(Math.min(1,p+.008));
           truck.position.copy(route.getPointAt(p));
           truck.position.y = 0.2;
           truck.lookAt(next);
@@ -626,6 +624,7 @@ export default function IndustrialMap3D({
       renderer.domElement.removeEventListener("pointerup", pointerUp);
       controls.dispose();
       renderer.dispose();
+      environmentTexture?.dispose();
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh) {
           object.geometry.dispose();

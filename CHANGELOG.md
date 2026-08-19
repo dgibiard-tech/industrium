@@ -2,6 +2,13 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Refonte panoramique et corrections de la carte
+
+- Nouveau décor photoréaliste à 360° entourant entièrement la carte.
+- Suppression du fond plat visible lors de la rotation de la caméra.
+- Routes renforcées avec marquages latéraux continus et courbes stabilisées.
+- Correction des sauts et boucles irréalistes des véhicules en fin de trajet.
+
 ## 19 août 2026 — Réseau routier 3D et suivi GPS
 
 - Remplacement des liaisons simples par des routes courbes avec embranchements et rond-point.
