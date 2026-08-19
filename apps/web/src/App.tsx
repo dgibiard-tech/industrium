@@ -340,6 +340,7 @@ function Game() {
   );
 }
 const gameUpdates=[
+  {title:"Refonte structurelle de la carte 3D",items:["Terrain continu sans contour rectangulaire artificiel","Routes courbes d’un seul tenant sans cassures","Rond-point réellement connecté et quatre accès régionaux","Accotements, marquages, glissières et relief détaillés"]},
   {title:"Centrale solaire industrielle",items:["Installation photovoltaïque achetable pour chaque usine","Production électrique en temps réel selon l’heure","Autoconsommation, économies mensuelles et CO₂ évité","Parc solaire agrandi automatiquement avec les niveaux"]},
   {title:"Usines évolutives sur 50 niveaux",items:["10 paliers industriels du petit atelier à la mégafactory autonome","Productivité et capacité progressives","Feuille de route complète avec avantages de chaque palier"]},
   {title:"Rentabilité logistique complète",items:["Coût par voyage : énergie, salarié et entretien","Prix du gazole au litre et consommation de chaque camion","Bénéfice net total et détaillé par véhicule","Inventaire des missions livrées et fret longue distance"]},

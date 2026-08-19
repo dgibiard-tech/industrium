@@ -2,6 +2,14 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Refonte structurelle de la carte 3D
+
+- Remplacement du contour rectangulaire par un terrain continu de 230 × 190 unités.
+- Nouveau relief progressif raccordé naturellement au panorama environnant.
+- Remplacement des routes segmentées par des rubans routiers courbes et continus.
+- Reconstruction du rond-point avec chaussée, îlot central et connexions réelles.
+- Ajout de quatre accès régionaux, d'accotements, de marquages et de glissières.
+
 ## 19 août 2026 — Centrale solaire industrielle
 
 - Ajout d'une centrale photovoltaïque achetable dans le catalogue d'équipements.

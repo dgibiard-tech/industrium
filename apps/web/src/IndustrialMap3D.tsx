@@ -131,9 +131,21 @@ function addRoad(scene: THREE.Scene, a: THREE.Vector3, b: THREE.Vector3) {
   for(const side of [-1,1]){const edge=box(.09,.145,length,new THREE.MeshBasicMaterial({color:0xe8ece8}),0,.145,0);edge.position.copy(road.position).addScaledVector(perpendicular,side*1.82);edge.rotation.copy(road.rotation);scene.add(edge)}
 }
 
+function roadRibbon(curve:THREE.CatmullRomCurve3,width:number,y:number,mat:THREE.Material,samples=72){
+  const vertices:number[]=[],indices:number[]=[];
+  for(let index=0;index<=samples;index++){
+    const t=index/samples,point=curve.getPoint(t),tangent=curve.getTangent(t).normalize(),side=new THREE.Vector3(-tangent.z,0,tangent.x).multiplyScalar(width/2);
+    vertices.push(point.x+side.x,y,point.z+side.z,point.x-side.x,y,point.z-side.z);
+    if(index<samples){const base=index*2;indices.push(base,base+2,base+1,base+2,base+3,base+1)}
+  }
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.Float32BufferAttribute(vertices,3));geometry.setIndex(indices);geometry.computeVertexNormals();
+  const mesh=new THREE.Mesh(geometry,mat);mesh.receiveShadow=true;return mesh;
+}
 function addCurvedRoad(scene:THREE.Scene,points:THREE.Vector3[]){
-  const curve=new THREE.CatmullRomCurve3(points.map(point=>point.clone()),false,"catmullrom",.35),samples=16;
-  for(let index=0;index<samples;index++)addRoad(scene,curve.getPoint(index/samples),curve.getPoint((index+1)/samples));
+  const curve=new THREE.CatmullRomCurve3(points.map(point=>point.clone()),false,"centripetal",.28);
+  scene.add(roadRibbon(curve,7,.075,material(0x6f7575,.05,.95),80),roadRibbon(curve,5.6,.12,material(0x202629,.08,.88),80));
+  for(let index=0;index<44;index+=2){const t=(index+.5)/44,point=curve.getPoint(t),next=curve.getPoint(Math.min(1,t+.006));const dash=box(.12,.035,1.45,new THREE.MeshBasicMaterial({color:0xf0c85e}),point.x,.17,point.z);dash.lookAt(next);scene.add(dash)}
+  for(const sideSign of [-1,1])for(let index=0;index<=20;index++){const t=index/20,point=curve.getPoint(t),tangent=curve.getTangent(t).normalize(),side=new THREE.Vector3(-tangent.z,0,tangent.x);const edge=box(.09,.035,1.7,new THREE.MeshBasicMaterial({color:0xf4f5ef}),point.x+side.x*sideSign*2.35,.175,point.z+side.z*sideSign*2.35);edge.lookAt(point.clone().add(tangent));scene.add(edge);if(index%2===0)scene.add(box(.1,.55,.1,material(0x9ba6aa,.65),point.x+side.x*sideSign*3,.35,point.z+side.z*sideSign*3))}
   return curve;
 }
 
@@ -230,15 +242,15 @@ function addTruck(scene: THREE.Scene, shipment: Shipment, index: number) {
 }
 
 function addLandscape(scene: THREE.Scene) {
-  const terrainGeo = new THREE.PlaneGeometry(150, 118, 30, 24);
+  const terrainGeo = new THREE.PlaneGeometry(230, 190, 64, 54);
   const pos = terrainGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i),
       y = pos.getY(i);
-    const edge = Math.max(0, (Math.abs(x) - 43) / 18, (Math.abs(y) - 34) / 17);
+    const radial=Math.sqrt((x/115)**2+(y/95)**2),edge=Math.max(0,radial-.56);
     pos.setZ(
       i,
-      edge * edge * 8 + Math.sin(x * 0.12) * Math.cos(y * 0.13) * 0.28,
+      Math.sin(x*.065)*Math.cos(y*.072)*.42+Math.sin((x+y)*.035)*.24+edge*edge*3.2,
     );
   }
   terrainGeo.computeVertexNormals();
@@ -246,6 +258,7 @@ function addLandscape(scene: THREE.Scene) {
   terrain.rotation.x = -Math.PI / 2;
   terrain.receiveShadow = true;
   scene.add(terrain);
+  const industrialPlateau=new THREE.Mesh(new THREE.CircleGeometry(56,96),material(0x3d5539,0,.98));industrialPlateau.rotation.x=-Math.PI/2;industrialPlateau.scale.set(1.22,.88,1);industrialPlateau.position.y=.025;industrialPlateau.receiveShadow=true;scene.add(industrialPlateau);
   const pond = new THREE.Mesh(
     new THREE.CircleGeometry(10, 48),
     new THREE.MeshStandardMaterial({
@@ -287,14 +300,20 @@ function addExterior(scene: THREE.Scene, active: Shipment[]) {
     new THREE.Vector3(15, 0.17, 18),
     new THREE.Vector3(29, 0.17, -23),
   ];
+  const junction=new THREE.Vector3(-5,.17,2),northGate=new THREE.Vector3(-8,.17,42),southGate=new THREE.Vector3(8,.17,-43),eastGate=new THREE.Vector3(50,.17,4),westGate=new THREE.Vector3(-50,.17,-3);
   const routes=[
-    addCurvedRoad(scene,[hubs[0],new THREE.Vector3(-34,.17,8),new THREE.Vector3(-25,.17,-2),hubs[1]]),
-    addCurvedRoad(scene,[hubs[1],new THREE.Vector3(-8,.17,-1),new THREE.Vector3(3,.17,12),hubs[2]]),
-    addCurvedRoad(scene,[hubs[2],new THREE.Vector3(27,.17,10),new THREE.Vector3(33,.17,-8),hubs[3]]),
-    addCurvedRoad(scene,[hubs[1],new THREE.Vector3(-4,.17,-18),new THREE.Vector3(13,.17,-24),hubs[3]]),
-    addCurvedRoad(scene,[hubs[0],new THREE.Vector3(-13,.17,35),new THREE.Vector3(8,.17,30),hubs[2]]),
+    addCurvedRoad(scene,[hubs[0],new THREE.Vector3(-34,.17,14),new THREE.Vector3(-22,.17,5),junction]),
+    addCurvedRoad(scene,[hubs[1],new THREE.Vector3(-16,.17,-5),junction]),
+    addCurvedRoad(scene,[junction,new THREE.Vector3(4,.17,8),hubs[2]]),
+    addCurvedRoad(scene,[hubs[2],new THREE.Vector3(30,.17,13),new THREE.Vector3(34,.17,-7),hubs[3]]),
+    addCurvedRoad(scene,[hubs[1],new THREE.Vector3(-5,.17,-19),new THREE.Vector3(14,.17,-25),hubs[3]]),
+    addCurvedRoad(scene,[hubs[0],new THREE.Vector3(-15,.17,37),new THREE.Vector3(6,.17,33),hubs[2]]),
+    addCurvedRoad(scene,[junction,new THREE.Vector3(-7,.17,24),northGate]),addCurvedRoad(scene,[junction,new THREE.Vector3(1,.17,-20),southGate]),addCurvedRoad(scene,[junction,new THREE.Vector3(23,.17,3),eastGate]),addCurvedRoad(scene,[junction,new THREE.Vector3(-28,.17,-1),westGate]),
   ];
-  const roundabout=new THREE.Mesh(new THREE.RingGeometry(4.2,7.2,48),material(0x24292b,.05,.9));roundabout.rotation.x=-Math.PI/2;roundabout.position.set(-5,.09,2);scene.add(roundabout);
+  const roundaboutBase=new THREE.Mesh(new THREE.CircleGeometry(7.3,64),material(0x727979,.05,.95));roundaboutBase.rotation.x=-Math.PI/2;roundaboutBase.position.set(-5,.08,2);scene.add(roundaboutBase);
+  const roundabout=new THREE.Mesh(new THREE.RingGeometry(4.15,6.6,64),material(0x202629,.05,.9));roundabout.rotation.x=-Math.PI/2;roundabout.position.set(-5,.14,2);scene.add(roundabout);
+  const island=new THREE.Mesh(new THREE.CircleGeometry(3.9,48),material(0x315c35,0,.95));island.rotation.x=-Math.PI/2;island.position.set(-5,.16,2);scene.add(island);
+  for(let angle=0;angle<Math.PI*2;angle+=Math.PI/8){const marker=box(.12,.03,1.05,new THREE.MeshBasicMaterial({color:0xffffff}),-5+Math.cos(angle)*5.4,.19,2+Math.sin(angle)*5.4);marker.rotation.y=-angle;scene.add(marker)}
   for(let angle=0;angle<Math.PI*2;angle+=Math.PI/2){const islandLight=new THREE.PointLight(0xffb35b,3,7);islandLight.position.set(-5+Math.cos(angle)*5.7,1.2,2+Math.sin(angle)*5.7);scene.add(islandLight)}
   for (let i = 0; i < 28; i++)
     scene.add(
