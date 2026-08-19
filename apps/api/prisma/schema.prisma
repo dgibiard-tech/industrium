@@ -1,0 +1,246 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+enum CompanyRole {
+  OWNER
+  MANAGER
+  EMPLOYEE
+}
+enum ListingStatus {
+  ACTIVE
+  SOLD_OUT
+  CANCELLED
+}
+enum OrderStatus {
+  ACCEPTED
+  COMPLETED
+  CANCELLED
+}
+enum StockMovementType {
+  IN
+  OUT
+  TRANSFER
+  RESERVATION
+  RELEASE
+  SHIPMENT
+  ADJUSTMENT
+}
+enum LedgerType {
+  CAPITAL
+  SALE
+  PURCHASE
+  SALARY
+  ADJUSTMENT
+}
+enum JobStatus {
+  OPEN
+  CLOSED
+}
+enum ContractStatus {
+  PENDING
+  ACTIVE
+  RESIGNED
+  TERMINATED
+}
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  passwordHash String
+  displayName String
+  createdAt DateTime @default(now())
+  refreshTokens RefreshToken[]
+  memberships CompanyMember[]
+  auditLogs AuditLog[]
+}
+model RefreshToken {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  expiresAt DateTime
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+model Company {
+  id String @id @default(cuid())
+  name String @unique
+  sector String
+  headquarters String
+  legalForm String
+  reputation Int @default(50)
+  createdAt DateTime @default(now())
+  members CompanyMember[]
+  account BankAccount?
+  warehouses Warehouse[]
+  listings MarketListing[]
+  purchaseOrders Order[] @relation("buyer")
+  saleOrders Order[] @relation("seller")
+  jobOffers JobOffer[]
+}
+model CompanyMember {
+  id String @id @default(cuid())
+  role CompanyRole @default(EMPLOYEE)
+  userId String
+  companyId String
+  user User @relation(fields: [userId], references: [id])
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@unique([userId, companyId])
+}
+model BankAccount {
+  id String @id @default(cuid())
+  balanceCents BigInt @default(0)
+  version Int @default(0)
+  companyId String @unique
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries LedgerTransaction[]
+}
+model LedgerTransaction {
+  id String @id @default(cuid())
+  type LedgerType
+  amountCents BigInt
+  description String
+  referenceId String?
+  idempotencyKey String? @unique
+  accountId String
+  account BankAccount @relation(fields: [accountId], references: [id])
+  createdAt DateTime @default(now())
+  @@index([accountId, createdAt])
+}
+model Product {
+  id String @id @default(cuid())
+  sku String @unique
+  name String
+  category String
+  unit String
+  weightKg Decimal @db.Decimal(16, 3)
+  volumeM3 Decimal @db.Decimal(16, 4)
+  stocks WarehouseStock[]
+  listings MarketListing[]
+  orderItems OrderItem[]
+}
+model Warehouse {
+  id String @id @default(cuid())
+  name String
+  city String
+  capacityM3 Decimal @db.Decimal(16, 2)
+  companyId String
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  stocks WarehouseStock[]
+  movements StockMovement[]
+}
+model WarehouseStock {
+  id String @id @default(cuid())
+  quantity Decimal @default(0) @db.Decimal(20, 3)
+  reservedQuantity Decimal @default(0) @db.Decimal(20, 3)
+  version Int @default(0)
+  warehouseId String
+  productId String
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  movements StockMovement[]
+  listings MarketListing[]
+  @@unique([warehouseId, productId])
+}
+model StockMovement {
+  id String @id @default(cuid())
+  type StockMovementType
+  quantity Decimal @db.Decimal(20, 3)
+  referenceId String?
+  warehouseId String
+  stockId String
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  stock WarehouseStock @relation(fields: [stockId], references: [id])
+  createdAt DateTime @default(now())
+}
+model MarketListing {
+  id String @id @default(cuid())
+  quantity Decimal @db.Decimal(20, 3)
+  unitPriceCents BigInt
+  status ListingStatus @default(ACTIVE)
+  version Int @default(0)
+  sellerId String
+  productId String
+  warehouseStockId String
+  seller Company @relation(fields: [sellerId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+  warehouseStock WarehouseStock @relation(fields: [warehouseStockId], references: [id])
+  orders Order[]
+  createdAt DateTime @default(now())
+  @@index([productId, status, unitPriceCents])
+}
+model Order {
+  id String @id @default(cuid())
+  quantity Decimal @db.Decimal(20, 3)
+  totalCents BigInt
+  status OrderStatus @default(COMPLETED)
+  idempotencyKey String @unique
+  buyerId String
+  sellerId String
+  listingId String
+  buyer Company @relation("buyer", fields: [buyerId], references: [id])
+  seller Company @relation("seller", fields: [sellerId], references: [id])
+  listing MarketListing @relation(fields: [listingId], references: [id])
+  items OrderItem[]
+  createdAt DateTime @default(now())
+}
+model OrderItem {
+  id String @id @default(cuid())
+  quantity Decimal @db.Decimal(20, 3)
+  unitPriceCents BigInt
+  orderId String
+  productId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+}
+model JobOffer {
+  id String @id @default(cuid())
+  title String
+  salaryCents BigInt
+  city String
+  status JobStatus @default(OPEN)
+  companyId String
+  company Company @relation(fields: [companyId], references: [id])
+  contracts EmployeeContract[]
+  createdAt DateTime @default(now())
+}
+model EmployeeContract {
+  id String @id @default(cuid())
+  status ContractStatus @default(PENDING)
+  salaryCents BigInt
+  userId String
+  jobOfferId String
+  jobOffer JobOffer @relation(fields: [jobOfferId], references: [id])
+  createdAt DateTime @default(now())
+  @@unique([userId, jobOfferId])
+}
+model Notification {
+  id String @id @default(cuid())
+  userId String
+  title String
+  body String
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([userId, createdAt])
+}
+model AuditLog {
+  id String @id @default(cuid())
+  action String
+  entityType String
+  entityId String?
+  metadata Json?
+  userId String?
+  user User? @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  @@index([entityType, entityId])
+}
+model OutboxEvent {
+  id String @id @default(cuid())
+  topic String
+  payload Json
+  processedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([processedAt, createdAt])
+}
