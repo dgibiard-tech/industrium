@@ -15,6 +15,11 @@ enum ListingStatus {
   SOLD_OUT
   CANCELLED
 }
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
 enum OrderStatus {
   ACCEPTED
   COMPLETED
@@ -109,6 +114,7 @@ model Company {
   vehicles Vehicle[]
   vehicleListings VehicleMarketListing[] @relation("vehicleSeller")
   vehiclePurchases VehicleMarketListing[] @relation("vehicleBuyer")
+  marketProposals MarketProposal[]
   shipments Shipment[] @relation("carrier")
   factories Factory[]
 }
@@ -289,8 +295,22 @@ model MarketListing {
   product Product @relation(fields: [productId], references: [id])
   warehouseStock WarehouseStock @relation(fields: [warehouseStockId], references: [id])
   orders Order[]
+  proposals MarketProposal[]
   createdAt DateTime @default(now())
   @@index([productId, status, unitPriceCents])
+}
+model MarketProposal {
+  id String @id @default(cuid())
+  quantity Decimal @db.Decimal(20, 3)
+  proposedUnitPriceCents BigInt
+  status ProposalStatus @default(PENDING)
+  listingId String
+  buyerId String
+  listing MarketListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyer Company @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  @@index([status, createdAt])
 }
 model Order {
   id String @id @default(cuid())

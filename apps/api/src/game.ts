@@ -14,6 +14,7 @@ class AssignShipmentDto extends CompanyActionDto { @IsString() vehicleId!:string
 class ListVehicleDto extends CompanyActionDto { @IsInt() @IsPositive() askingPriceCents!:number }
 class EquipmentDto extends CompanyActionDto { @IsString() @IsIn(['ASSEMBLY_LINE','ELECTRONICS_LINE','WOODWORK_LINE','ROBOTICS']) kind!:string }
 class ProductionDto extends CompanyActionDto { @IsString() @IsIn(['VEHICLE','COMPUTER','FURNITURE']) productType!:'VEHICLE'|'COMPUTER'|'FURNITURE'; @IsInt() @Min(1) quantity!:number }
+class ProposalDto { @IsString() buyerCompanyId!:string; @IsInt() @IsPositive() quantity!:number; @IsInt() @IsPositive() proposedUnitPriceCents!:number }
 
 const vehicleCatalog={
   'atlas-tx480':{model:'Atlas TX 480',type:'Semi-remorque diesel',capacityKg:24000,price:12_500_000n,prefix:'AT'},
@@ -32,7 +33,7 @@ const productionCatalog={VEHICLE:{name:'Véhicule Industrium',sku:'FACTORY_VEHIC
 export class GameService {
   constructor(private readonly db:PrismaService){}
   products(){return this.db.product.findMany({orderBy:{name:'asc'}})}
-  listings(){return this.db.marketListing.findMany({where:{status:'ACTIVE',quantity:{gt:0}},include:{product:true,seller:{select:{name:true}},warehouseStock:{include:{warehouse:true}}},orderBy:{unitPriceCents:'asc'}})}
+  listings(){return this.db.marketListing.findMany({where:{status:'ACTIVE',quantity:{gt:0}},include:{product:true,seller:{select:{id:true,name:true}},warehouseStock:{include:{warehouse:true}}},orderBy:{unitPriceCents:'asc'}})}
   companies(userId:string){return this.db.company.findMany({where:{members:{some:{userId}}},include:companyView,orderBy:{createdAt:'asc'}})}
   async createCompany(userId:string,dto:CompanyDto){
     return this.db.$transaction(async tx=>{
@@ -84,6 +85,16 @@ export class GameService {
       return order;
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
   }
+  marketProposals(userId:string){
+    return this.db.marketProposal.findMany({
+      where:{OR:[{buyer:{members:{some:{userId}}}},{listing:{seller:{members:{some:{userId}}}}}]},
+      include:{buyer:{select:{id:true,name:true}},listing:{include:{product:true,seller:{select:{id:true,name:true}}}}},
+      orderBy:{createdAt:'desc'}
+    });
+  }
+  async createProposal(userId:string,listingId:string,dto:ProposalDto){const listing=await this.db.marketListing.findUnique({where:{id:listingId}});const buyer=await this.db.company.findFirst({where:{id:dto.buyerCompanyId,members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}});if(!listing||listing.status!=='ACTIVE'||!buyer||buyer.id===listing.sellerId||listing.quantity.lt(dto.quantity))throw new BadRequestException('Proposition invalide');return this.db.marketProposal.create({data:{listingId,buyerId:buyer.id,quantity:dto.quantity,proposedUnitPriceCents:BigInt(dto.proposedUnitPriceCents)}})}
+  async rejectProposal(userId:string,proposalId:string){const proposal=await this.db.marketProposal.findFirst({where:{id:proposalId,status:'PENDING',listing:{seller:{members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}}}});if(!proposal)throw new NotFoundException();return this.db.marketProposal.update({where:{id:proposal.id},data:{status:'REJECTED',resolvedAt:new Date()}})}
+  async acceptProposal(userId:string,proposalId:string){return this.db.$transaction(async tx=>{const proposal=await tx.marketProposal.findFirst({where:{id:proposalId,status:'PENDING',listing:{seller:{members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}}},include:{buyer:{include:{account:true,warehouses:true}},listing:{include:{seller:{include:{account:true}},warehouseStock:true}}}});if(!proposal||!proposal.buyer.account||!proposal.listing.seller.account||proposal.listing.status!=='ACTIVE'||proposal.listing.quantity.lt(proposal.quantity))throw new BadRequestException('Proposition indisponible');const total=BigInt(proposal.quantity.toString())*proposal.proposedUnitPriceCents;const claimed=await tx.marketProposal.updateMany({where:{id:proposal.id,status:'PENDING'},data:{status:'ACCEPTED',resolvedAt:new Date()}});if(!claimed.count)throw new BadRequestException('Proposition déjà traitée');const paid=await tx.bankAccount.updateMany({where:{id:proposal.buyer.account.id,balanceCents:{gte:total}},data:{balanceCents:{decrement:total},version:{increment:1}}});if(!paid.count)throw new BadRequestException('Trésorerie de l’acheteur insuffisante');await tx.bankAccount.update({where:{id:proposal.listing.seller.account.id},data:{balanceCents:{increment:total},version:{increment:1}}});await tx.marketListing.update({where:{id:proposal.listing.id},data:{quantity:{decrement:proposal.quantity},version:{increment:1}}});const target=proposal.buyer.warehouses[0]??await tx.warehouse.create({data:{companyId:proposal.buyer.id,name:'Entrepôt principal',city:proposal.buyer.headquarters,capacityM3:10000}});const targetStock=await tx.warehouseStock.upsert({where:{warehouseId_productId:{warehouseId:target.id,productId:proposal.listing.productId}},create:{warehouseId:target.id,productId:proposal.listing.productId,quantity:proposal.quantity},update:{quantity:{increment:proposal.quantity},version:{increment:1}}});await tx.warehouseStock.update({where:{id:proposal.listing.warehouseStockId},data:{quantity:{decrement:proposal.quantity},reservedQuantity:{decrement:proposal.quantity},version:{increment:1}}});const order=await tx.order.create({data:{buyerId:proposal.buyer.id,sellerId:proposal.listing.sellerId,listingId:proposal.listing.id,quantity:proposal.quantity,totalCents:total,idempotencyKey:`proposal:${proposal.id}`,items:{create:{productId:proposal.listing.productId,quantity:proposal.quantity,unitPriceCents:proposal.proposedUnitPriceCents}}}});await Promise.all([tx.ledgerTransaction.create({data:{accountId:proposal.buyer.account.id,type:'PURCHASE',amountCents:-total,description:'Achat négocié',referenceId:order.id}}),tx.ledgerTransaction.create({data:{accountId:proposal.listing.seller.account.id,type:'SALE',amountCents:total,description:'Vente négociée',referenceId:order.id}}),tx.stockMovement.create({data:{type:'OUT',quantity:proposal.quantity,warehouseId:proposal.listing.warehouseStock.warehouseId,stockId:proposal.listing.warehouseStockId,referenceId:order.id}}),tx.stockMovement.create({data:{type:'IN',quantity:proposal.quantity,warehouseId:target.id,stockId:targetStock.id,referenceId:order.id}})]);return order},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable})}
   orders(userId:string){return this.db.order.findMany({where:{OR:[{buyer:{members:{some:{userId}}}},{seller:{members:{some:{userId}}}}]},include:{buyer:{select:{name:true}},seller:{select:{name:true}},items:{include:{product:true}}},orderBy:{createdAt:'desc'}})}
   async jobs(userId:string){
     const jobs=await this.db.jobOffer.findMany({where:{status:'OPEN'},include:{company:{select:{id:true,name:true}},contracts:{select:{id:true,status:true,userId:true,user:{select:{displayName:true}}}}},orderBy:{createdAt:'desc'}});
@@ -235,6 +246,10 @@ export class GameController {
   @Get('companies') companies(@Req() r:AuthRequest){return this.game.companies(r.user.sub)} @Post('companies') createCompany(@Req() r:AuthRequest,@Body() d:CompanyDto){return this.game.createCompany(r.user.sub,d)}
   @Post('market/listings') createListing(@Req() r:AuthRequest,@Body() d:ListingDto){return this.game.createListing(r.user.sub,d)}
   @Post('market/listings/:id/buy') buy(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:BuyDto,@Headers('idempotency-key') key?:string){return this.game.buy(r.user.sub,id,d,key)}
+  @Get('market/proposals') marketProposals(@Req() r:AuthRequest){return this.game.marketProposals(r.user.sub)}
+  @Post('market/listings/:id/proposals') createProposal(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:ProposalDto){return this.game.createProposal(r.user.sub,id,d)}
+  @Post('market/proposals/:id/accept') acceptProposal(@Req() r:AuthRequest,@Param('id') id:string){return this.game.acceptProposal(r.user.sub,id)}
+  @Post('market/proposals/:id/reject') rejectProposal(@Req() r:AuthRequest,@Param('id') id:string){return this.game.rejectProposal(r.user.sub,id)}
   @Get('orders') orders(@Req() r:AuthRequest){return this.game.orders(r.user.sub)} @Get('job-offers') jobs(@Req() r:AuthRequest){return this.game.jobs(r.user.sub)}
   @Post('companies/:id/job-offers') createJob(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:JobDto){return this.game.createJob(r.user.sub,id,d)}
   @Post('job-offers/:id/apply') apply(@Req() r:AuthRequest,@Param('id') id:string){return this.game.apply(r.user.sub,id)}
