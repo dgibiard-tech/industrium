@@ -2,6 +2,13 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Usines évolutives sur 50 niveaux
+
+- Extension des usines jusqu'au niveau 50.
+- Ajout de 10 rangs industriels, de l'atelier initial à l'industrie autonome.
+- Nouvelle feuille de route indiquant les paliers débloqués et les avantages futurs.
+- Productivité et capacité maximale par série augmentées à chaque niveau.
+
 ## 19 août 2026 — Rentabilité logistique complète
 
 - Ajout du prix du gazole au litre et de la consommation réelle estimée par modèle.

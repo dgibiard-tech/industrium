@@ -340,6 +340,7 @@ function Game() {
   );
 }
 const gameUpdates=[
+  {title:"Usines évolutives sur 50 niveaux",items:["10 paliers industriels du petit atelier à la mégafactory autonome","Productivité et capacité progressives","Feuille de route complète avec avantages de chaque palier"]},
   {title:"Rentabilité logistique complète",items:["Coût par voyage : énergie, salarié et entretien","Prix du gazole au litre et consommation de chaque camion","Bénéfice net total et détaillé par véhicule","Inventaire des missions livrées et fret longue distance"]},
   {title:"Tour de contrôle des commandes",items:["Recherche, filtres et tri avancés","Indicateurs commerciaux et graphique des flux","Fiches détaillées avec facture, taxes et traçabilité"]},
   {title:"Défilement complet de l’interface",items:["Barres de défilement sur toutes les pages principales","Listes, terminaux et fenêtres 3D désormais défilables","Style industriel et adaptation mobile"]},
@@ -351,6 +352,9 @@ const gameUpdates=[
   {title:"Traçabilité et économie mondiale",items:["Pays et ville d’origine de chaque offre","Prix variables selon les stocks, achats et productions réelles","Cours, tendances et recommandations de prix"]},
   {title:"Monde industriel 3D",items:["Carte enrichie avec relief, ville, énergie et trafic","Usines et entrepôts ultra-modernes visitables","Terminaux de gestion dans tous les bâtiments"]},
   {title:"Transport et flotte",items:["30 missions minimum chaque jour","Réseau de hubs européens","Dispatch automatique des véhicules"]},
+] as const;
+const factoryTiers=[
+  {level:1,name:"Atelier industriel",benefit:"Production initiale",color:"#8797a1"},{level:5,name:"Manufacture locale",benefit:"Capacité +25 %",color:"#58a6c4"},{level:10,name:"Usine régionale",benefit:"Lignes optimisées",color:"#3fc0aa"},{level:15,name:"Complexe automatisé",benefit:"Robotisation avancée",color:"#63d06f"},{level:20,name:"Pôle national",benefit:"Production continue",color:"#d7ba45"},{level:25,name:"Smart Factory",benefit:"Pilotage par IA",color:"#ef983d"},{level:30,name:"Gigafactory",benefit:"Capacité massive",color:"#ee6547"},{level:35,name:"Campus industriel",benefit:"Logistique intégrée",color:"#da5d9d"},{level:40,name:"Mégafactory",benefit:"Automatisation totale",color:"#9d78ed"},{level:50,name:"Industrie autonome",benefit:"Excellence mondiale",color:"#62dff1"},
 ] as const;
 function Changelog(){return <section className="changelogPage"><div className="changelogHero"><small>INDUSTRIUM · DÉVELOPPEMENT CONTINU</small><h2>Journal des mises à jour</h2><p>Chaque amélioration réalisée et publiée est enregistrée ici.</p><span>DERNIÈRE MISE À JOUR · 19 AOÛT 2026</span></div><div className="releaseTimeline">{gameUpdates.map((update,index)=><article key={update.title}><div className="releaseMarker"><i /><span>{index===0?"NOUVEAU":`VERSION ${gameUpdates.length-index}`}</span></div><div><small>19 AOÛT 2026</small><h3>{update.title}</h3><ul>{update.items.map(item=><li key={item}>{item}</li>)}</ul></div></article>)}</div></section>}
 function CreateCompany() {
@@ -1388,9 +1392,13 @@ function FactoryManagement({
   const error =
     equipment.error || upgrade.error || produce.error || payroll.error;
   const staff = factory.baseStaff + factory.employees.length;
+  const currentTier = [...factoryTiers].reverse().find((tier) => factory.level >= tier.level)!;
+  const nextTier = factoryTiers.find((tier) => tier.level > factory.level);
+  const maxBatch = 100 + (factory.level - 1) * 20;
+  const productionBonus = Math.round((Math.sqrt(factory.level) - 1) * 35);
   return (
     <section className="factoryPage">
-      <div className="factoryHero">
+      <div className="factoryHero advancedFactoryHero" style={{"--tier-color":currentTier.color} as React.CSSProperties}>
         <div>
           <small>UNITÉ DE PRODUCTION · {factory.city}</small>
           <h2>{factory.name}</h2>
@@ -1398,15 +1406,21 @@ function FactoryManagement({
             Gérez les investissements, le personnel et les cycles de
             fabrication.
           </p>
+          <div className="factoryTierName"><span>{factory.level}</span><div><small>CLASSE INDUSTRIELLE</small><b>{currentTier.name}</b></div></div>
         </div>
         <div className="factoryLevel">
           <span>NIVEAU</span>
           <b>{factory.level}</b>
-          <button disabled={upgrade.isPending} onClick={() => upgrade.mutate()}>
-            Améliorer · {money(factory.level * 20_000_000)}
+          <button disabled={upgrade.isPending || factory.level >= 50} onClick={() => upgrade.mutate()}>
+            {factory.level >= 50 ? "Niveau maximal" : `Améliorer · ${money(factory.level * 20_000_000)}`}
           </button>
         </div>
       </div>
+      <section className="factoryProgression">
+        <header><div><small>PROGRESSION DU SITE</small><h3>Niveau {factory.level} sur 50</h3></div><div><b>{currentTier.name}</b>{nextTier && <em>Prochain palier : {nextTier.name} · niveau {nextTier.level}</em>}</div></header>
+        <div className="factoryLevelTrack"><i style={{width:`${factory.level/50*100}%`}} /></div>
+        <div className="factoryRoadmap">{factoryTiers.map((tier)=><article key={tier.level} className={factory.level>=tier.level?"unlocked":"locked"}><span style={{background:tier.color}}>{tier.level}</span><div><small>NIVEAU {tier.level}</small><b>{tier.name}</b><em>{tier.benefit}</em></div><strong>{factory.level>=tier.level?"DÉBLOQUÉ":"VERROUILLÉ"}</strong></article>)}</div>
+      </section>
       {error && <p className="error">{error.message}</p>}
       <div className="factoryMetrics">
         <Card
@@ -1424,6 +1438,8 @@ function FactoryManagement({
           value={String(factory.equipment.length)}
           delta={`Niveau usine ${factory.level}`}
         />
+        <Card label="Bonus productivité" value={`+${productionBonus}%`} delta="vitesse de fabrication" />
+        <Card label="Capacité par série" value={maxBatch.toLocaleString("fr-FR")} delta="unités maximum" />
       </div>
       <div className="smartModules">
         <div>
@@ -1498,7 +1514,7 @@ function FactoryManagement({
           <input
             type="number"
             min="1"
-            max="100"
+            max={maxBatch}
             value={quantity}
             onChange={(event) =>
               setQuantity(Math.max(1, Number(event.target.value)))
