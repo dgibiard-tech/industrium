@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Shipment } from "./App";
 
-type BuildingKind = "factory" | "warehouse";
+type BuildingKind = "factory" | "warehouse" | "headquarters";
 type Selection =
   | { kind: "vehicle"; shipment: Shipment }
   | { kind: "building"; buildingKind: BuildingKind; name: string }
@@ -98,6 +98,15 @@ function addWarehouse(
   group.add(box(6.5, 1, 0.2, material(0xd77a28), 3.5, 5.1, -5.22));
   mark(group, { kind: "building", buildingKind: "warehouse", name });
   scene.add(group);
+}
+
+function addHeadquarters(scene:THREE.Scene,x:number,z:number,name:string){
+  const group=new THREE.Group();group.position.set(x,0,z);
+  const glass=new THREE.MeshStandardMaterial({color:0x5da9c5,metalness:.45,roughness:.14,transparent:true,opacity:.78,emissive:0x103b4a,emissiveIntensity:.8});
+  group.add(box(13,.3,11,material(0x343f44),0,.15,0),box(10,11,8,glass,0,5.6,0),box(12,2.4,10,material(0x202c32,.55),0,1.2,0));
+  for(let y=3;y<10;y+=2)group.add(box(10.4,.18,8.4,material(0xd4832d,.55),0,y,0));
+  group.add(box(5,.9,.22,new THREE.MeshStandardMaterial({color:0x30c6e8,emissive:0x116c83,emissiveIntensity:2}),0,7,-4.15));
+  mark(group,{kind:"building",buildingKind:"headquarters",name});scene.add(group);
 }
 
 function addRoad(scene: THREE.Scene, a: THREE.Vector3, b: THREE.Vector3) {
@@ -268,6 +277,7 @@ function addExterior(scene: THREE.Scene, active: Shipment[]) {
   addFactory(scene, 25, -22, "Complexe d’Assemblage Atlas", 0.78);
   addWarehouse(scene, 15, 18, "Entrepôt Logistique Central", 0.22);
   addWarehouse(scene, -29, 25, "Plateforme Fret Ouest", -0.18);
+  addHeadquarters(scene,2,-30,"Siège social Industrium");
   const hubs = [
     new THREE.Vector3(-32, 0.17, 31),
     new THREE.Vector3(-19, 0.17, -10),
@@ -304,7 +314,9 @@ function addInterior(scene: THREE.Scene, interior: NonNullable<Interior>) {
   const backdropTexture = new THREE.TextureLoader().load(
     interior.kind === "factory"
       ? "/assets/factory-interior-world-v3.png"
-      : "/assets/warehouse-interior-world-v3.png",
+      : interior.kind === "warehouse"
+        ? "/assets/warehouse-interior-world-v3.png"
+        : "/assets/headquarters-interior-v1.png",
   );
   backdropTexture.colorSpace = THREE.SRGBColorSpace;
   const backdrop = new THREE.Mesh(
@@ -346,7 +358,15 @@ function addInterior(scene: THREE.Scene, interior: NonNullable<Interior>) {
     light.position.set(x, 10, 0);
     scene.add(light);
   }
-  if (interior.kind === "warehouse") {
+  if(interior.kind==="headquarters"){
+    for(let i=0;i<9;i++){
+      const desk=box(3,.18,1.5,material(i%2?0x6d4d35:0x344c58),-16+(i%5)*8,.85,-8+Math.floor(i/5)*8);scene.add(desk);
+      const screen=box(1.1,.75,.08,new THREE.MeshStandardMaterial({color:0x1f708b,emissive:0x1b91ad,emissiveIntensity:2}),desk.position.x,1.35,desk.position.z);scene.add(screen);
+    }
+    for(let i=0;i<12;i++){
+      const employee=new THREE.Group();const body=new THREE.Mesh(new THREE.CylinderGeometry(.28,.4,1.25,12),material([0x247b9b,0x7648a2,0xb8662b,0x3e8b67][i%4]));body.position.y=1.05;employee.add(body);const head=new THREE.Mesh(new THREE.SphereGeometry(.27,12,8),material(0xd1a47f));head.position.y=1.88;employee.add(head);employee.position.set(-18+(i%6)*7,0,-12+Math.floor(i/6)*11);scene.add(employee);animations.push(time=>{employee.position.x=-20+((time*(.55+i%3*.08)+i*5)%40);employee.rotation.y=Math.PI/2;});
+    }
+  } else if (interior.kind === "warehouse") {
     for (const z of [-11, -4, 4, 11])
       for (const x of [-17, -7, 7, 17]) {
         scene.add(box(5.5, 6.5, 2.2, material(0x3b454a, 0.55), x, 3.25, z));
@@ -652,11 +672,11 @@ export default function IndustrialMap3D({
         </div>
         {!interior && !selection && (
           <>
-            <div className="worldLiveBar"><span><i /> MONDE EN DIRECT</span><b>4 sites connectés</b><b>{active.length} véhicules suivis</b><b>Énergie renouvelable 38 %</b></div>
+            <div className="worldLiveBar"><span><i /> MONDE EN DIRECT</span><b>5 sites connectés</b><b>{active.length} véhicules suivis</b><b>Énergie renouvelable 38 %</b></div>
             <div className="mapPanel">
               <small>RÉSEAU LOGISTIQUE</small>
               <strong>{active.length} convois actifs</strong>
-              <span>2 usines · 2 entrepôts visitables</span>
+              <span>2 usines · 2 entrepôts · 1 siège social visitables</span>
               <span>{shipments.filter((s) => s.status === "OPEN").length} contrats disponibles</span>
               <span>16 quartiers · 3 éoliennes · 18 panneaux solaires</span>
             </div>
@@ -666,15 +686,15 @@ export default function IndustrialMap3D({
           <>
             <div className="interiorBadge">
               <small>SITE ULTRA-MODERNE · CONNECTÉ</small>
-              <strong>{interior.kind === "factory" ? "Smart Factory 4.0" : "Smart Hub logistique"}</strong>
-              <span>Robots, énergie et sécurité pilotés en temps réel</span>
+              <strong>{interior.kind === "factory" ? "Smart Factory 4.0" : interior.kind === "warehouse" ? "Smart Hub logistique" : "Direction & collaborateurs"}</strong>
+              <span>{interior.kind==="headquarters"?"Employés et services pilotés en temps réel":"Robots, énergie et sécurité pilotés en temps réel"}</span>
             </div>
             <div className="facilityConsole">
               <small>CENTRE DE CONTRÔLE</small>
               <div className="facilityTabs">
                 {(interior.kind === "factory"
                   ? ["Production", "Robots", "Qualité", "Énergie"]
-                  : ["Stockage", "Tri robotisé", "Quais", "Énergie"]
+                  : interior.kind === "warehouse" ? ["Stockage", "Tri robotisé", "Quais", "Énergie"] : ["Direction","Finance","Ressources humaines","Opérations"]
                 ).map((zone, index) => (
                   <button className={activeZone === index ? "active" : ""} key={zone} onClick={() => setActiveZone(index)}>{zone}</button>
                 ))}
@@ -689,7 +709,7 @@ export default function IndustrialMap3D({
                 <div>
                   {(interior.kind === "factory"
                     ? [["Usines","Production"],["Commandes","Commandes"],["Stocks","Matières"],["Emplois","Personnel"],["Transport","Expéditions"],["Marché mondial","Marché"]]
-                    : [["Stocks","Inventaire"],["Commandes","Commandes"],["Marché mondial","Marché"],["Transport","Quais"],["Usines","Production"],["Emplois","Personnel"]]
+                    : interior.kind === "warehouse" ? [["Stocks","Inventaire"],["Commandes","Commandes"],["Marché mondial","Marché"],["Transport","Quais"],["Usines","Production"],["Emplois","Personnel"]] : [["Vue d’ensemble","Direction"],["Emplois","Collaborateurs"],["Commandes","Commercial"],["Marché mondial","Finance"],["Usines","Industrie"],["Transport","Logistique"]]
                   ).map(([tab,label],index)=><button key={tab} onClick={()=>onNavigate(tab)}><i>{["▦","≡","◈","⇄","⚙","♟"][index]}</i><span>{label}</span><em>OUVRIR →</em></button>)}
                 </div>
               </div>
@@ -764,7 +784,7 @@ export default function IndustrialMap3D({
             <p>
               {selection.buildingKind === "factory"
                 ? "Observez les machines, les lignes de production et les installations techniques."
-                : "Parcourez les rayonnages, les palettes et la zone de manutention."}
+                : selection.buildingKind === "warehouse" ? "Parcourez les rayonnages, les palettes et la zone de manutention." : "Rejoignez les collaborateurs, la direction, les ressources humaines et le centre de pilotage du groupe."}
             </p>
             <button className="enterBuilding" onClick={enterBuilding}>
               Entrer dans le bâtiment →

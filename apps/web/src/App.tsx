@@ -11,11 +11,13 @@ type Company = {
   gems: number;
   warehouses: {
     name: string;
+    city:string;
+    capacityM3:string;
     stocks: {
       id: string;
       quantity: string;
       reservedQuantity: string;
-      product: { name: string; unit: string };
+      product: { name: string; unit: string;category:string;weightKg:string;volumeM3:string };
     }[];
   }[];
 };
@@ -29,6 +31,7 @@ type Listing = {
   origin:{city:string;country:string;code:string};
 };
 type EconomyQuote={product:{id:string;name:string;category:string;unit:string};referencePriceCents:string;changePercent:number;supply:number;demand:number;stock:number;production24:number;sold24:number;trend:"UP"|"DOWN"|"STABLE"};
+type GameOrder={id:string;quantity:string;totalCents:string;status:string;createdAt:string;buyer:{id:string;name:string};seller:{id:string;name:string};origin:{city:string;country:string;code:string};items:{id:string;quantity:string;unitPriceCents:string;product:{name:string;unit:string;category:string}}[];tracking:{step:string;done:boolean}[]};
 type MarketProposal={id:string;quantity:string;proposedUnitPriceCents:string;status:"PENDING"|"ACCEPTED"|"REJECTED";buyer:{id:string;name:string};listing:{id:string;unitPriceCents:string;product:{name:string;unit:string};seller:{id:string;name:string}};createdAt:string};
 type Job = {
   id: string;
@@ -227,7 +230,7 @@ function Game() {
   const proposals=useQuery({queryKey:["market-proposals"],queryFn:()=>api<MarketProposal[]>("/market/proposals"),refetchInterval:3000});
   const orders = useQuery({
     queryKey: ["orders"],
-    queryFn: () => api<any[]>("/orders"),
+    queryFn: () => api<GameOrder[]>("/orders"),
   });
   const jobs = useQuery({
     queryKey: ["jobs"],
@@ -299,9 +302,9 @@ function Game() {
         ) : tab === "Marché mondial" ? (
           <Market company={company} data={listings.data ?? []} proposals={proposals.data??[]} economy={economy.data??[]} />
         ) : tab === "Stocks" ? (
-          <Stocks company={company} />
+          <Stocks company={company} onNavigate={setTab} />
         ) : tab === "Commandes" ? (
-          <Orders data={orders.data ?? []} />
+          <Orders data={orders.data ?? []} company={company} onNavigate={setTab} />
         ) : tab === "Emplois" ? (
           <Jobs company={company} data={jobs.data ?? []} />
         ) : tab === "Usines" ? (
@@ -535,56 +538,63 @@ function Market({ company, data,proposals,economy }: { company: Company; data: L
     </section>
   );
 }
-function Stocks({ company }: { company: Company }) {
+function Stocks({ company,onNavigate }: { company: Company;onNavigate:(tab:string)=>void }) {
+  const [search,setSearch]=useState("");
+  const allStocks=company.warehouses.flatMap(warehouse=>warehouse.stocks.map(stock=>({warehouse,...stock})));
+  const totalUnits=allStocks.reduce((sum,stock)=>sum+Number(stock.quantity),0),reserved=allStocks.reduce((sum,stock)=>sum+Number(stock.reservedQuantity),0);
   return (
-    <section>
+    <section className="inventoryControl">
+      <div className="inventoryHero"><div><small>WMS · CONTRÔLE EN TEMPS RÉEL</small><h2>Centre de gestion des stocks</h2><p>Supervisez les capacités, réservations et seuils de réapprovisionnement de tous les entrepôts.</p></div><div className="warehousePulse"><i/>SYSTÈMES OPÉRATIONNELS</div></div>
+      <div className="inventoryMetrics"><Card label="Stock total" value={totalUnits.toLocaleString("fr-FR")} delta="unités physiques"/><Card label="Disponible" value={(totalUnits-reserved).toLocaleString("fr-FR")} delta="prêt à vendre"/><Card label="Réservé" value={reserved.toLocaleString("fr-FR")} delta="commandes en préparation"/><Card label="Alertes" value={String(allStocks.filter(s=>Number(s.quantity)-Number(s.reservedQuantity)<10).length)} delta="seuil faible"/></div>
+      <div className="stockToolbar"><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Rechercher un produit ou une catégorie…"/><button onClick={()=>onNavigate("Marché mondial")}>+ Réapprovisionner</button><button onClick={()=>onNavigate("Commandes")}>Voir les commandes</button></div>
       {company.warehouses.map((w) => (
-        <div key={w.name}>
+        <div className="warehouseZone" key={w.name}>
           <div className="sectionTitle">
             <div>
-              <small>ENTREPÔT</small>
+              <small>ENTREPÔT CONNECTÉ · {w.city}</small>
               <h2>{w.name}</h2>
             </div>
+            <span>{w.stocks.length} références · capacité {Number(w.capacityM3).toLocaleString("fr-FR")} m³</span>
           </div>
-          <div className="table">
-            {w.stocks.map((s) => (
-              <div className="tr stock" key={s.id}>
-                <b>{s.product.name}</b>
-                <span>
-                  Total {s.quantity} {s.product.unit}
-                </span>
-                <span>Réservé {s.reservedQuantity}</span>
-                <strong>
-                  Disponible {Number(s.quantity) - Number(s.reservedQuantity)}
-                </strong>
-              </div>
-            ))}
+          <div className="stockGrid">
+            {w.stocks.filter(s=>`${s.product.name} ${s.product.category}`.toLowerCase().includes(search.toLowerCase())).map((s) => {const available=Number(s.quantity)-Number(s.reservedQuantity),fill=Math.min(100,Number(s.quantity)/Math.max(25,Number(s.quantity))*100),alert=available<10;return (
+              <article className={alert?"lowStock":""} key={s.id}>
+                <header><div><small>{s.product.category}</small><h3>{s.product.name}</h3></div><em>{alert?"STOCK FAIBLE":"DISPONIBLE"}</em></header>
+                <div className="stockNumbers"><strong>{available.toLocaleString("fr-FR")}</strong><span>{s.product.unit} disponibles</span></div>
+                <div className="stockGauge"><i style={{width:`${fill}%`}}/></div>
+                <dl><div><dt>Physique</dt><dd>{s.quantity}</dd></div><div><dt>Réservé</dt><dd>{s.reservedQuantity}</dd></div><div><dt>Poids/unité</dt><dd>{Number(s.product.weightKg).toLocaleString("fr-FR")} kg</dd></div></dl>
+                <footer><button onClick={()=>onNavigate("Marché mondial")}>{alert?"Commander maintenant":"Acheter / vendre"}</button><button onClick={()=>onNavigate("Commandes")}>Mouvements →</button></footer>
+              </article>);})}
           </div>
         </div>
       ))}
     </section>
   );
 }
-function Orders({ data }: { data: any[] }) {
+function Orders({ data,company,onNavigate }: { data: GameOrder[];company:Company;onNavigate:(tab:string)=>void }) {
+  const [filter,setFilter]=useState<"ALL"|"BUY"|"SELL">("ALL");
+  const visible=data.filter(order=>filter==="ALL"||(filter==="BUY"?order.buyer.id===company.id:order.seller.id===company.id));
   return (
-    <section>
+    <section className="orderControl">
       <div className="sectionTitle">
         <div>
-          <small>REGISTRE</small>
-          <h2>Commandes</h2>
+          <small>OMS · FLUX COMMERCIAUX EN DIRECT</small>
+          <h2>Centre de contrôle des commandes</h2>
         </div>
+        <button onClick={()=>onNavigate("Marché mondial")}>+ Nouvelle commande</button>
       </div>
-      <div className="table">
-        {data.map((o) => (
-          <div className="tr stock" key={o.id}>
-            <b>{o.items[0]?.product.name}</b>
-            <span>
-              {o.buyer.name} → {o.seller.name}
-            </span>
-            <span>{o.quantity} unités</span>
-            <strong>{money(o.totalCents)}</strong>
-          </div>
+      <div className="orderMetrics"><Card label="Commandes" value={String(data.length)} delta="historique total"/><Card label="Achats" value={String(data.filter(o=>o.buyer.id===company.id).length)} delta="entrées de stock"/><Card label="Ventes" value={String(data.filter(o=>o.seller.id===company.id).length)} delta="sorties de stock"/><Card label="Valeur échangée" value={money(data.reduce((sum,o)=>sum+BigInt(o.totalCents),0n))} delta="volume cumulé"/></div>
+      <div className="orderFilters">{([['ALL','Toutes'],['BUY','Achats'],['SELL','Ventes']] as const).map(([value,label])=><button className={filter===value?"active":""} key={value} onClick={()=>setFilter(value)}>{label}</button>)}</div>
+      <div className="orderList">
+        {visible.map((o) => (
+          <article key={o.id}>
+            <header><div><small>CMD-{o.id.slice(-7).toUpperCase()} · {new Date(o.createdAt).toLocaleDateString("fr-FR")}</small><h3>{o.items[0]?.product.name}</h3></div><div className="orderAmount"><strong>{money(o.totalCents)}</strong><em>{o.status}</em></div></header>
+            <div className="orderRoute"><span><i>{o.origin.code}</i>{o.seller.name}<small>{o.origin.city}, {o.origin.country}</small></span><b>→</b><span>{o.buyer.name}<small>Entrepôt destinataire</small></span><strong>{o.quantity} {o.items[0]?.product.unit}</strong></div>
+            <div className="orderTimeline">{o.tracking.map((step,index)=><div className={step.done?"done":""} key={step.step}><i>{step.done?"✓":index+1}</i><span>{step.step}</span></div>)}</div>
+            <footer><span>{o.buyer.id===company.id?"ACHAT":"VENTE"} · {o.items[0]?.product.category}</span><button onClick={()=>onNavigate("Stocks")}>Voir le stock</button><button onClick={()=>onNavigate("Transport")}>Suivre le transport</button></footer>
+          </article>
         ))}
+        {!visible.length&&<div className="emptyFleet">Aucune commande dans cette catégorie.</div>}
       </div>
     </section>
   );
