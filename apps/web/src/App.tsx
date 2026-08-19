@@ -23,10 +23,11 @@ type Listing = {
   id: string;
   quantity: string;
   unitPriceCents: string;
-  product: { name: string; unit: string; category:string };
+  product: { id:string; name: string; unit: string; category:string };
   seller: { id:string; name: string };
   warehouseStock: { warehouse: { city: string } };
 };
+type EconomyQuote={product:{id:string;name:string;category:string;unit:string};referencePriceCents:string;changePercent:number;supply:number;demand:number;stock:number;production24:number;sold24:number;trend:"UP"|"DOWN"|"STABLE"};
 type MarketProposal={id:string;quantity:string;proposedUnitPriceCents:string;status:"PENDING"|"ACCEPTED"|"REJECTED";buyer:{id:string;name:string};listing:{id:string;unitPriceCents:string;product:{name:string;unit:string};seller:{id:string;name:string}};createdAt:string};
 type Job = {
   id: string;
@@ -221,6 +222,7 @@ function Game() {
     queryKey: ["listings"],
     queryFn: () => api<Listing[]>("/market/listings"),
   });
+  const economy=useQuery({queryKey:["market-economy"],queryFn:()=>api<EconomyQuote[]>("/market/economy"),refetchInterval:5000});
   const proposals=useQuery({queryKey:["market-proposals"],queryFn:()=>api<MarketProposal[]>("/market/proposals"),refetchInterval:3000});
   const orders = useQuery({
     queryKey: ["orders"],
@@ -294,7 +296,7 @@ function Game() {
         {!company ? (
           <CreateCompany />
         ) : tab === "Marché mondial" ? (
-          <Market company={company} data={listings.data ?? []} proposals={proposals.data??[]} />
+          <Market company={company} data={listings.data ?? []} proposals={proposals.data??[]} economy={economy.data??[]} />
         ) : tab === "Stocks" ? (
           <Stocks company={company} />
         ) : tab === "Commandes" ? (
@@ -498,11 +500,11 @@ function Card(p: { label: string; value: string; delta: string }) {
     </article>
   );
 }
-function Market({ company, data,proposals }: { company: Company; data: Listing[];proposals:MarketProposal[] }) {
+function Market({ company, data,proposals,economy }: { company: Company; data: Listing[];proposals:MarketProposal[];economy:EconomyQuote[] }) {
   const qc = useQueryClient();
   const [quantities,setQuantities]=useState<Record<string,number>>({});
   const [offerPrices,setOfferPrices]=useState<Record<string,string>>({});
-  const refresh=()=>Promise.all([qc.invalidateQueries({ queryKey: ["listings"] }),qc.invalidateQueries({ queryKey: ["companies"] }),qc.invalidateQueries({ queryKey: ["orders"] }),qc.invalidateQueries({queryKey:["market-proposals"]})]);
+  const refresh=()=>Promise.all([qc.invalidateQueries({ queryKey: ["listings"] }),qc.invalidateQueries({ queryKey: ["companies"] }),qc.invalidateQueries({ queryKey: ["orders"] }),qc.invalidateQueries({queryKey:["market-proposals"]}),qc.invalidateQueries({queryKey:["market-economy"]})]);
   const buy = useMutation({
     mutationFn: ({id,quantity}:{id:string;quantity:number}) => api(`/market/listings/${id}/buy`, {
         method: "POST",
@@ -526,7 +528,8 @@ function Market({ company, data,proposals }: { company: Company; data: Listing[]
         <span>{data.length} offres actives</span>
       </div>
       {error&&<p className="error">{error.message}</p>}
-      <div className="marketCards">{data.map(l=>{const max=Math.floor(Number(l.quantity)),quantity=Math.min(max,quantities[l.id]??1),priceEuros=offerPrices[l.id]??String(Math.round(Number(l.unitPriceCents)/100*.92));return <article key={l.id}><header><div><small>{l.product.category??"PRODUIT INDUSTRIEL"}</small><h3>{l.product.name}</h3></div><strong>{money(l.unitPriceCents)}<em>/{l.product.unit}</em></strong></header><div className="marketOrigin"><span>{l.seller.name}</span><b>{l.warehouseStock.warehouse.city}</b><span>Stock : {l.quantity} {l.product.unit}</span></div><label>Quantité à acheter<input type="number" min="1" max={max} value={quantity} onChange={event=>setQuantities({...quantities,[l.id]:Math.max(1,Math.min(max,Number(event.target.value)))})}/></label><div className="marketTotal"><span>Total au tarif affiché</span><b>{money(BigInt(l.unitPriceCents)*BigInt(quantity))}</b></div><button disabled={buy.isPending||l.seller.id===company.id} onClick={()=>buy.mutate({id:l.id,quantity})}>{l.seller.id===company.id?"Votre offre":"Acheter immédiatement"}</button>{l.seller.id!==company.id&&<div className="priceProposal"><label>Votre prix unitaire (€)<input type="number" min="1" value={priceEuros} onChange={event=>setOfferPrices({...offerPrices,[l.id]:event.target.value})}/></label><button disabled={propose.isPending} onClick={()=>propose.mutate({id:l.id,quantity,price:Number(priceEuros)})}>Proposer ce prix</button></div>}</article>})}</div>
+      <div className="economyBoard">{economy.slice(0,8).map(q=><article className={q.trend.toLowerCase()} key={q.product.id}><div><small>{q.product.category}</small><b>{q.product.name}</b></div><strong>{money(q.referencePriceCents)}<em>/{q.product.unit}</em></strong><span>{q.trend==="UP"?"▲":q.trend==="DOWN"?"▼":"●"} {q.changePercent>0?"+":""}{q.changePercent}%</span><dl><div><dt>Offre</dt><dd>{q.supply}</dd></div><div><dt>Demande</dt><dd>{q.demand}</dd></div><div><dt>Production 24 h</dt><dd>{q.production24}</dd></div></dl></article>)}</div>
+      <div className="marketCards">{data.map(l=>{const quote=economy.find(q=>q.product.id===l.product.id),max=Math.floor(Number(l.quantity)),quantity=Math.min(max,quantities[l.id]??1),priceEuros=offerPrices[l.id]??String(Math.round(Number(quote?.referencePriceCents??l.unitPriceCents)/100));return <article key={l.id}><header><div><small>{l.product.category??"PRODUIT INDUSTRIEL"}</small><h3>{l.product.name}</h3></div><strong>{money(l.unitPriceCents)}<em>/{l.product.unit}</em></strong></header>{quote&&<div className={`marketQuote ${quote.trend.toLowerCase()}`}><span>Cours dynamique</span><b>{money(quote.referencePriceCents)}</b><em>{quote.trend==="UP"?"▲":quote.trend==="DOWN"?"▼":"●"} {quote.changePercent>0?"+":""}{quote.changePercent}%</em></div>}<div className="marketOrigin"><span>{l.seller.name}</span><b>{l.warehouseStock.warehouse.city}</b><span>Stock : {l.quantity} {l.product.unit}</span></div><label>Quantité à acheter<input type="number" min="1" max={max} value={quantity} onChange={event=>setQuantities({...quantities,[l.id]:Math.max(1,Math.min(max,Number(event.target.value)))})}/></label><div className="marketTotal"><span>Total au tarif affiché</span><b>{money(BigInt(l.unitPriceCents)*BigInt(quantity))}</b></div><button disabled={buy.isPending||l.seller.id===company.id} onClick={()=>buy.mutate({id:l.id,quantity})}>{l.seller.id===company.id?"Votre offre":"Acheter immédiatement"}</button>{l.seller.id!==company.id&&<div className="priceProposal"><label>Votre prix unitaire conseillé (€)<input type="number" min="1" value={priceEuros} onChange={event=>setOfferPrices({...offerPrices,[l.id]:event.target.value})}/></label><button disabled={propose.isPending} onClick={()=>propose.mutate({id:l.id,quantity,price:Number(priceEuros)})}>Proposer ce prix</button></div>}</article>})}</div>
       {(received.length>0||sent.length>0)&&<div className="negotiations"><div><h3>Propositions reçues</h3>{received.length?received.map(p=><article key={p.id}><div><b>{p.buyer.name}</b><span>{p.quantity} {p.listing.product.unit} de {p.listing.product.name}</span></div><strong>{money(p.proposedUnitPriceCents)} / unité</strong><button onClick={()=>resolve.mutate({id:p.id,action:"accept"})}>Accepter</button><button className="reject" onClick={()=>resolve.mutate({id:p.id,action:"reject"})}>Refuser</button></article>):<p>Aucune proposition en attente.</p>}</div><div><h3>Vos propositions</h3>{sent.length?sent.slice(0,8).map(p=><article key={p.id}><div><b>{p.listing.product.name}</b><span>{p.quantity} unité(s) · {p.listing.seller.name}</span></div><strong>{money(p.proposedUnitPriceCents)}</strong><em className={p.status.toLowerCase()}>{p.status}</em></article>):<p>Aucune proposition envoyée.</p>}</div></div>}
     </section>
   );

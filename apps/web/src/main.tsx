@@ -2,4 +2,5 @@ import React from 'react';import{createRoot}from'react-dom/client';import{QueryC
 import './fleet-network.css';
 import './facility-modern.css';
 import './map-perfect.css';
+import './economy-dynamic.css';
 createRoot(document.getElementById('root')!).render(<React.StrictMode><QueryClientProvider client={new QueryClient()}><App/></QueryClientProvider></React.StrictMode>);

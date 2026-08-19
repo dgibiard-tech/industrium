@@ -48,6 +48,35 @@ export class GameService {
   }
   products(){return this.db.product.findMany({orderBy:{name:'asc'}})}
   listings(){return this.db.marketListing.findMany({where:{status:'ACTIVE',quantity:{gt:0}},include:{product:true,seller:{select:{id:true,name:true}},warehouseStock:{include:{warehouse:true}}},orderBy:{unitPriceCents:'asc'}})}
+  async marketEconomy(){
+    const now=Date.now(),since48h=new Date(now-48*60*60*1000),since24h=new Date(now-24*60*60*1000);
+    const [products,production]=await Promise.all([
+      this.db.product.findMany({include:{stocks:true,listings:{where:{status:'ACTIVE',quantity:{gt:0}},include:{proposals:{where:{status:'PENDING'}}}},orderItems:{where:{order:{createdAt:{gte:since48h}}},include:{order:true}}},orderBy:{name:'asc'}}),
+      this.db.productionOrder.findMany({where:{OR:[{status:'RUNNING'},{completedAt:{gte:since48h}}]}}),
+    ]);
+    return products.map(product=>{
+      const factoryOutput=production.filter(item=>item.productName===product.name);
+      const production24=factoryOutput.filter(item=>item.status==='RUNNING'||(item.completedAt&&item.completedAt>=since24h)).reduce((sum,item)=>sum+item.quantity,0);
+      const productionPrevious=factoryOutput.filter(item=>item.completedAt&&item.completedAt<since24h).reduce((sum,item)=>sum+item.quantity,0);
+      const stock=product.stocks.reduce((sum,item)=>sum+Number(item.quantity)-Number(item.reservedQuantity),0);
+      const listed=product.listings.reduce((sum,item)=>sum+Number(item.quantity),0);
+      const proposals=product.listings.flatMap(item=>item.proposals).reduce((sum,item)=>sum+Number(item.quantity),0);
+      const sold24=product.orderItems.filter(item=>item.order.createdAt>=since24h).reduce((sum,item)=>sum+Number(item.quantity),0);
+      const soldPrevious=product.orderItems.filter(item=>item.order.createdAt<since24h).reduce((sum,item)=>sum+Number(item.quantity),0);
+      const demand=Math.round((sold24*2+proposals*.8+12)*10)/10;
+      const supply=Math.round((listed+stock*.2+production24*1.3)*10)/10;
+      const previousDemand=soldPrevious*2+12,previousSupply=Math.max(1,listed+stock*.2+productionPrevious*1.3);
+      const pressure=Math.max(.55,Math.min(1.8,(demand+20)/(supply+20))),previousPressure=Math.max(.55,Math.min(1.8,(previousDemand+20)/(previousSupply+20)));
+      const marketValue=product.listings.length?product.listings.reduce((sum,item)=>sum+Number(item.unitPriceCents)*Number(item.quantity),0)/Math.max(1,listed):0;
+      const recentItems=product.orderItems.filter(item=>item.order.createdAt>=since24h),recentQty=recentItems.reduce((sum,item)=>sum+Number(item.quantity),0);
+      const recentValue=recentItems.reduce((sum,item)=>sum+Number(item.unitPriceCents)*Number(item.quantity),0)/Math.max(1,recentQty);
+      const recipe=Object.values(productionCatalog).find(item=>item.name===product.name);
+      const base=recentQty?recentValue:marketValue||Number(recipe?.unitCost??BigInt(Math.max(500,Math.round(Number(product.weightKg)*1800))))*1.35;
+      const referencePriceCents=Math.max(100,Math.round(base*pressure));
+      const changePercent=Math.round((pressure/previousPressure-1)*1000)/10;
+      return {product:{id:product.id,name:product.name,category:product.category,unit:product.unit},referencePriceCents:String(referencePriceCents),changePercent,supply,demand,stock:Math.round(stock*10)/10,production24,sold24,trend:changePercent>1?'UP':changePercent<-1?'DOWN':'STABLE'};
+    });
+  }
   companies(userId:string){return this.db.company.findMany({where:{members:{some:{userId}}},include:companyView,orderBy:{createdAt:'asc'}})}
   async createCompany(userId:string,dto:CompanyDto){
     return this.db.$transaction(async tx=>{
@@ -274,6 +303,7 @@ export class GameService {
 export class GameController {
   constructor(private readonly game:GameService){}
   @Get('products') products(){return this.game.products()} @Get('market/listings') listings(){return this.game.listings()}
+  @Get('market/economy') marketEconomy(){return this.game.marketEconomy()}
   @Get('companies') companies(@Req() r:AuthRequest){return this.game.companies(r.user.sub)} @Post('companies') createCompany(@Req() r:AuthRequest,@Body() d:CompanyDto){return this.game.createCompany(r.user.sub,d)}
   @Post('market/listings') createListing(@Req() r:AuthRequest,@Body() d:ListingDto){return this.game.createListing(r.user.sub,d)}
   @Post('market/listings/:id/buy') buy(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:BuyDto,@Headers('idempotency-key') key?:string){return this.game.buy(r.user.sub,id,d,key)}
