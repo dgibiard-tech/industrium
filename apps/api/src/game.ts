@@ -11,6 +11,7 @@ class JobDto { @IsString() @MinLength(2) title!:string; @IsString() city!:string
 class CompanyActionDto { @IsString() companyId!:string }
 class BuyVehicleDto extends CompanyActionDto { @IsString() @IsIn(['atlas-tx480','voltis-e18','nova-v6']) modelId!:string }
 class AssignShipmentDto extends CompanyActionDto { @IsString() vehicleId!:string }
+class ListVehicleDto extends CompanyActionDto { @IsInt() @IsPositive() askingPriceCents!:number }
 
 const vehicleCatalog={
   'atlas-tx480':{model:'Atlas TX 480',type:'Semi-remorque diesel',capacityKg:24000,price:12_500_000n,prefix:'AT'},
@@ -21,6 +22,7 @@ const vehicleCatalog={
 const companyView={account:true,warehouses:{include:{stocks:{include:{product:true}}}},members:true} as const;
 const ACCELERATION_GEM_COST=10;
 const shipmentDurationMs=(distanceKm:number)=>Math.min(30,Math.max(2,Math.ceil(distanceKm/100)))*60_000;
+const vehicleValue=(purchasePriceCents:bigint,condition:number,mileageKm:number)=>purchasePriceCents*BigInt(Math.max(3000,condition*100-Math.min(5000,Math.floor(mileageKm/50))))/10_000n;
 
 @Injectable()
 export class GameService {
@@ -103,7 +105,41 @@ export class GameService {
       return tx.employeeContract.findUniqueOrThrow({where:{id:contractId}});
     });
   }
-  async vehicles(userId:string){return this.db.vehicle.findMany({where:{company:{members:{some:{userId}}}},orderBy:{createdAt:'asc'}})}
+  async vehicles(userId:string){const vehicles=await this.db.vehicle.findMany({where:{company:{members:{some:{userId}}}},include:{marketListings:{where:{status:'ACTIVE'},select:{id:true,askingPriceCents:true}}},orderBy:{createdAt:'asc'}});return vehicles.map(vehicle=>({...vehicle,currentValueCents:vehicleValue(vehicle.purchasePriceCents,vehicle.condition,Number(vehicle.mileageKm))}))}
+  async vehicleMarket(){const listings=await this.db.vehicleMarketListing.findMany({where:{status:'ACTIVE'},include:{seller:{select:{id:true,name:true,headquarters:true}},vehicle:true},orderBy:{createdAt:'desc'}});return listings.map(listing=>({...listing,currentValueCents:vehicleValue(listing.vehicle.purchasePriceCents,listing.vehicle.condition,Number(listing.vehicle.mileageKm))}))}
+  async listVehicle(userId:string,vehicleId:string,dto:ListVehicleDto){
+    const vehicle=await this.db.vehicle.findFirst({where:{id:vehicleId,companyId:dto.companyId,status:'AVAILABLE',company:{members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}},include:{marketListings:{where:{status:'ACTIVE'}}}});
+    if(!vehicle) throw new NotFoundException('Véhicule indisponible');
+    if(vehicle.marketListings.length) throw new BadRequestException('Ce véhicule est déjà en vente');
+    return this.db.vehicleMarketListing.create({data:{vehicleId:vehicle.id,sellerId:dto.companyId,askingPriceCents:BigInt(dto.askingPriceCents)}});
+  }
+  async maintainVehicle(userId:string,vehicleId:string,dto:CompanyActionDto){
+    return this.db.$transaction(async tx=>{
+      const vehicle=await tx.vehicle.findFirst({where:{id:vehicleId,companyId:dto.companyId,status:'AVAILABLE',company:{members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}},include:{company:{include:{account:true}}}});
+      if(!vehicle?.company.account) throw new NotFoundException('Véhicule indisponible');
+      const cost=BigInt(Math.max(50_000,(100-vehicle.condition)*50_000));
+      const paid=await tx.bankAccount.updateMany({where:{id:vehicle.company.account.id,balanceCents:{gte:cost}},data:{balanceCents:{decrement:cost},version:{increment:1}}});
+      if(paid.count!==1) throw new BadRequestException('Trésorerie insuffisante pour l’entretien');
+      const updated=await tx.vehicle.update({where:{id:vehicle.id},data:{condition:100,lastMaintenanceAt:new Date(),maintenanceCount:{increment:1}}});
+      await tx.ledgerTransaction.create({data:{accountId:vehicle.company.account.id,type:'PURCHASE',amountCents:-cost,description:`Entretien ${vehicle.model}`,referenceId:vehicle.id}});
+      return updated;
+    });
+  }
+  async buyUsedVehicle(userId:string,listingId:string,dto:CompanyActionDto){
+    return this.db.$transaction(async tx=>{
+      const listing=await tx.vehicleMarketListing.findUnique({where:{id:listingId},include:{vehicle:true,seller:{include:{account:true}}}});
+      const buyer=await tx.company.findFirst({where:{id:dto.companyId,members:{some:{userId,role:{in:['OWNER','MANAGER']}}}},include:{account:true}});
+      if(!listing||listing.status!=='ACTIVE'||!buyer?.account||!listing.seller.account||listing.sellerId===buyer.id) throw new BadRequestException('Offre de véhicule indisponible');
+      const claimed=await tx.vehicleMarketListing.updateMany({where:{id:listing.id,status:'ACTIVE'},data:{status:'SOLD',buyerId:buyer.id,soldAt:new Date()}});
+      if(claimed.count!==1) throw new BadRequestException('Ce véhicule vient d’être vendu');
+      const paid=await tx.bankAccount.updateMany({where:{id:buyer.account.id,balanceCents:{gte:listing.askingPriceCents}},data:{balanceCents:{decrement:listing.askingPriceCents},version:{increment:1}}});
+      if(paid.count!==1) throw new BadRequestException('Trésorerie insuffisante');
+      await tx.bankAccount.update({where:{id:listing.seller.account.id},data:{balanceCents:{increment:listing.askingPriceCents},version:{increment:1}}});
+      await tx.vehicle.update({where:{id:listing.vehicleId},data:{companyId:buyer.id}});
+      await Promise.all([tx.ledgerTransaction.create({data:{accountId:buyer.account.id,type:'PURCHASE',amountCents:-listing.askingPriceCents,description:`Achat international ${listing.vehicle.model}`,referenceId:listing.id}}),tx.ledgerTransaction.create({data:{accountId:listing.seller.account.id,type:'SALE',amountCents:listing.askingPriceCents,description:`Vente internationale ${listing.vehicle.model}`,referenceId:listing.id}})]);
+      return tx.vehicle.findUniqueOrThrow({where:{id:listing.vehicleId}});
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
+  }
   async shipments(userId:string){
     const moving=await this.db.shipment.findMany({where:{carrier:{members:{some:{userId}}},status:{in:['ASSIGNED','IN_TRANSIT']},acceptedAt:{not:null},arrivesAt:{not:null}},include:{carrier:{include:{account:true}},vehicle:true}});
     const now=new Date();
@@ -187,7 +223,11 @@ export class GameController {
   @Post('job-offers/:id/apply') apply(@Req() r:AuthRequest,@Param('id') id:string){return this.game.apply(r.user.sub,id)}
   @Post('job-offers/:id/contracts/:contractId/hire') hire(@Req() r:AuthRequest,@Param('id') id:string,@Param('contractId') contractId:string){return this.game.hire(r.user.sub,id,contractId)}
   @Get('vehicles') vehicles(@Req() r:AuthRequest){return this.game.vehicles(r.user.sub)}
+  @Get('vehicle-market') vehicleMarket(){return this.game.vehicleMarket()}
   @Post('vehicles/buy-truck') buyTruck(@Req() r:AuthRequest,@Body() d:BuyVehicleDto){return this.game.buyTruck(r.user.sub,d)}
+  @Post('vehicles/:id/list') listVehicle(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:ListVehicleDto){return this.game.listVehicle(r.user.sub,id,d)}
+  @Post('vehicles/:id/maintenance') maintainVehicle(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.maintainVehicle(r.user.sub,id,d)}
+  @Post('vehicle-market/:id/buy') buyUsedVehicle(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.buyUsedVehicle(r.user.sub,id,d)}
   @Get('shipments') shipments(@Req() r:AuthRequest){return this.game.shipments(r.user.sub)}
   @Post('shipments/:id/assign') assignShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:AssignShipmentDto){return this.game.assignShipment(r.user.sub,id,d)}
   @Post('shipments/:id/accelerate') accelerateShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.accelerateShipment(r.user.sub,id,d)}

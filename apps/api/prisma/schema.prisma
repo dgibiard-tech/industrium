@@ -51,6 +51,11 @@ enum VehicleStatus {
   ASSIGNED
   MAINTENANCE
 }
+enum VehicleListingStatus {
+  ACTIVE
+  SOLD
+  CANCELLED
+}
 enum ShipmentStatus {
   OPEN
   ASSIGNED
@@ -93,6 +98,8 @@ model Company {
   saleOrders Order[] @relation("seller")
   jobOffers JobOffer[]
   vehicles Vehicle[]
+  vehicleListings VehicleMarketListing[] @relation("vehicleSeller")
+  vehiclePurchases VehicleMarketListing[] @relation("vehicleBuyer")
   shipments Shipment[] @relation("carrier")
 }
 model Vehicle {
@@ -103,12 +110,29 @@ model Vehicle {
   capacityKg Decimal @db.Decimal(16, 2)
   mileageKm Decimal @default(0) @db.Decimal(16, 1)
   condition Int @default(100)
+  lastMaintenanceAt DateTime?
+  maintenanceCount Int @default(0)
   purchasePriceCents BigInt
   status VehicleStatus @default(AVAILABLE)
   companyId String
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   shipments Shipment[]
+  marketListings VehicleMarketListing[]
   createdAt DateTime @default(now())
+}
+model VehicleMarketListing {
+  id String @id @default(cuid())
+  askingPriceCents BigInt
+  status VehicleListingStatus @default(ACTIVE)
+  vehicleId String
+  sellerId String
+  buyerId String?
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+  seller Company @relation("vehicleSeller", fields: [sellerId], references: [id])
+  buyer Company? @relation("vehicleBuyer", fields: [buyerId], references: [id])
+  createdAt DateTime @default(now())
+  soldAt DateTime?
+  @@index([status, createdAt])
 }
 model Shipment {
   id String @id @default(cuid())
