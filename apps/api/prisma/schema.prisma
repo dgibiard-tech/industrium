@@ -66,6 +66,7 @@ model User {
   refreshTokens RefreshToken[]
   memberships CompanyMember[]
   auditLogs AuditLog[]
+  employeeContracts EmployeeContract[]
 }
 model RefreshToken {
   id String @id @default(cuid())
@@ -261,6 +262,7 @@ model EmployeeContract {
   status ContractStatus @default(PENDING)
   salaryCents BigInt
   userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobOfferId String
   jobOffer JobOffer @relation(fields: [jobOfferId], references: [id])
   createdAt DateTime @default(now())

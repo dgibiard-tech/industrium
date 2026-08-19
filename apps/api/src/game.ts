@@ -79,9 +79,30 @@ export class GameService {
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
   }
   orders(userId:string){return this.db.order.findMany({where:{OR:[{buyer:{members:{some:{userId}}}},{seller:{members:{some:{userId}}}}]},include:{buyer:{select:{name:true}},seller:{select:{name:true}},items:{include:{product:true}}},orderBy:{createdAt:'desc'}})}
-  jobs(){return this.db.jobOffer.findMany({where:{status:'OPEN'},include:{company:{select:{name:true}}},orderBy:{createdAt:'desc'}})}
+  async jobs(userId:string){
+    const jobs=await this.db.jobOffer.findMany({where:{status:'OPEN'},include:{company:{select:{id:true,name:true}},contracts:{select:{id:true,status:true,userId:true,user:{select:{displayName:true}}}}},orderBy:{createdAt:'desc'}});
+    return jobs.map(job=>({...job,applied:job.contracts.some(contract=>contract.userId===userId),applicants:job.contracts.map(contract=>({id:contract.id,status:contract.status,displayName:contract.user.displayName}))}));
+  }
   async createJob(userId:string,companyId:string,dto:JobDto){const allowed=await this.db.companyMember.findFirst({where:{companyId,userId,role:{in:['OWNER','MANAGER']}}});if(!allowed) throw new NotFoundException();return this.db.jobOffer.create({data:{...dto,salaryCents:BigInt(dto.salaryCents),companyId}})}
-  async apply(userId:string,jobId:string){const job=await this.db.jobOffer.findUnique({where:{id:jobId}});if(!job||job.status!=='OPEN')throw new NotFoundException();return this.db.employeeContract.upsert({where:{userId_jobOfferId:{userId,jobOfferId:jobId}},create:{userId,jobOfferId:jobId,salaryCents:job.salaryCents},update:{}})}
+  async apply(userId:string,jobId:string){
+    const job=await this.db.jobOffer.findUnique({where:{id:jobId},include:{company:{include:{members:true}}}});
+    if(!job||job.status!=='OPEN')throw new NotFoundException();
+    if(job.company.members.some(member=>member.userId===userId)) throw new BadRequestException('Vous ne pouvez pas postuler dans votre propre entreprise');
+    const contract=await this.db.employeeContract.upsert({where:{userId_jobOfferId:{userId,jobOfferId:jobId}},create:{userId,jobOfferId:jobId,salaryCents:job.salaryCents},update:{}});
+    await this.db.notification.createMany({data:job.company.members.filter(member=>member.role==='OWNER'||member.role==='MANAGER').map(member=>({userId:member.userId,title:'Nouvelle candidature',body:`Un joueur a postulé à l’offre ${job.title}`}))});
+    return contract;
+  }
+  async hire(userId:string,jobId:string,contractId:string){
+    return this.db.$transaction(async tx=>{
+      const job=await tx.jobOffer.findFirst({where:{id:jobId,status:'OPEN',company:{members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}}});
+      if(!job) throw new NotFoundException('Offre inaccessible');
+      const hired=await tx.employeeContract.updateMany({where:{id:contractId,jobOfferId:job.id,status:'PENDING'},data:{status:'ACTIVE'}});
+      if(hired.count!==1) throw new BadRequestException('Candidature indisponible');
+      await tx.employeeContract.updateMany({where:{jobOfferId:job.id,id:{not:contractId},status:'PENDING'},data:{status:'TERMINATED'}});
+      await tx.jobOffer.update({where:{id:job.id},data:{status:'CLOSED'}});
+      return tx.employeeContract.findUniqueOrThrow({where:{id:contractId}});
+    });
+  }
   async vehicles(userId:string){return this.db.vehicle.findMany({where:{company:{members:{some:{userId}}}},orderBy:{createdAt:'asc'}})}
   async shipments(userId:string){
     const moving=await this.db.shipment.findMany({where:{carrier:{members:{some:{userId}}},status:{in:['ASSIGNED','IN_TRANSIT']},acceptedAt:{not:null},arrivesAt:{not:null}},include:{carrier:{include:{account:true}},vehicle:true}});
@@ -161,9 +182,10 @@ export class GameController {
   @Get('companies') companies(@Req() r:AuthRequest){return this.game.companies(r.user.sub)} @Post('companies') createCompany(@Req() r:AuthRequest,@Body() d:CompanyDto){return this.game.createCompany(r.user.sub,d)}
   @Post('market/listings') createListing(@Req() r:AuthRequest,@Body() d:ListingDto){return this.game.createListing(r.user.sub,d)}
   @Post('market/listings/:id/buy') buy(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:BuyDto,@Headers('idempotency-key') key?:string){return this.game.buy(r.user.sub,id,d,key)}
-  @Get('orders') orders(@Req() r:AuthRequest){return this.game.orders(r.user.sub)} @Get('job-offers') jobs(){return this.game.jobs()}
+  @Get('orders') orders(@Req() r:AuthRequest){return this.game.orders(r.user.sub)} @Get('job-offers') jobs(@Req() r:AuthRequest){return this.game.jobs(r.user.sub)}
   @Post('companies/:id/job-offers') createJob(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:JobDto){return this.game.createJob(r.user.sub,id,d)}
   @Post('job-offers/:id/apply') apply(@Req() r:AuthRequest,@Param('id') id:string){return this.game.apply(r.user.sub,id)}
+  @Post('job-offers/:id/contracts/:contractId/hire') hire(@Req() r:AuthRequest,@Param('id') id:string,@Param('contractId') contractId:string){return this.game.hire(r.user.sub,id,contractId)}
   @Get('vehicles') vehicles(@Req() r:AuthRequest){return this.game.vehicles(r.user.sub)}
   @Post('vehicles/buy-truck') buyTruck(@Req() r:AuthRequest,@Body() d:BuyVehicleDto){return this.game.buyTruck(r.user.sub,d)}
   @Get('shipments') shipments(@Req() r:AuthRequest){return this.game.shipments(r.user.sub)}

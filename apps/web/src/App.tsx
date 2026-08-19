@@ -32,7 +32,9 @@ type Job = {
   title: string;
   salaryCents: string;
   city: string;
-  company: { name: string };
+  company: { id:string; name: string };
+  applied:boolean;
+  applicants:{id:string;displayName:string;status:string}[];
 };
 type Vehicle = { id:string; registration:string; model:string; type:string; capacityKg:string; mileageKm:string; condition:number; status:"AVAILABLE"|"ASSIGNED"|"MAINTENANCE" };
 export type Shipment = { id:string; reference:string; cargoName:string; weightKg:string; originCity:string; destinationCity:string; distanceKm:number; rewardCents:string; status:"OPEN"|"ASSIGNED"|"IN_TRANSIT"|"DELIVERED"; progressPercent:number; acceptedAt?:string; arrivesAt?:string; carrier?:{name:string}; vehicle?:Vehicle };
@@ -144,6 +146,7 @@ function Game() {
   const jobs = useQuery({
     queryKey: ["jobs"],
     queryFn: () => api<Job[]>("/job-offers"),
+    refetchInterval: 3000,
   });
   const vehicles = useQuery({ queryKey:["vehicles"], queryFn:()=>api<Vehicle[]>("/vehicles") });
   const shipments = useQuery({ queryKey:["shipments"], queryFn:()=>api<Shipment[]>("/shipments"), refetchInterval:5000 });
@@ -196,7 +199,7 @@ function Game() {
         ) : tab === "Commandes" ? (
           <Orders data={orders.data ?? []} />
         ) : tab === "Emplois" ? (
-          <Jobs data={jobs.data ?? []} />
+          <Jobs company={company} data={jobs.data ?? []} />
         ) : tab === "Transport" ? (
           <Transport company={company} vehicles={vehicles.data??[]} shipments={shipments.data??[]} />
         ) : tab === "Carte" ? (
@@ -507,32 +510,43 @@ function Transport({company,vehicles,shipments}:{company:Company;vehicles:Vehicl
   return <section className="transportPage"><div className="fleetHeader"><div><small>DIVISION LOGISTIQUE</small><h2>Centre de transport</h2><p>Les convois roulent automatiquement, même lorsque vous quittez le jeu.</p></div><div className="gemWallet">◆ {company.gems} gemmes</div></div><div className="vehicleShop">{vehicleCatalog.map(v=><article className={`shopVehicle ${v.accent}`} key={v.id}><img src={v.image} alt={v.model}/><div><small>NOUVEAU VÉHICULE</small><h3>{v.model}</h3><p>{v.type}</p><dl><span><b>{v.capacity} t</b> capacité</span><span><b>{v.range}</b> autonomie</span></dl><button onClick={()=>buy.mutate(v.id)} disabled={buy.isPending}>Acheter · {money(v.price)}</button></div></article>)}</div><div className="transportMetrics"><Card label="Véhicules" value={String(vehicles.length)} delta={`${available.length} disponible(s)`}/><Card label="Missions actives" value={String(active.length)} delta="Transport automatique"/><Card label="Contrats ouverts" value={String(open.length)} delta="Marché européen"/></div>{error&&<p className="error">{error.message}</p>}<h3>Flotte de l’entreprise</h3><div className="vehicleRow">{vehicles.length?vehicles.map(v=><article className="vehicleCard modern" key={v.id}><img src={vehicleImage(v.model)} alt={v.model}/><small>{v.registration}</small><h3>{v.model}</h3><p>{v.type} · {Number(v.capacityKg)/1000} t</p><div className="condition"><span style={{width:`${v.condition}%`}}></span></div><footer><b>{v.condition}% état</b><em className={v.status.toLowerCase()}>{v.status}</em></footer></article>):<div className="emptyFleet">Aucun véhicule. Choisissez votre premier modèle dans le catalogue.</div>}</div>{active.length>0&&<><h3>Convois automatiques en cours</h3><div className="activeConvoys">{active.map(s=>{const remaining=Math.max(0,new Date(s.arrivesAt??now).getTime()-now);const minutes=Math.floor(remaining/60000),seconds=Math.floor(remaining%60000/1000);return <article key={s.id}><div><small>{s.reference} · {s.vehicle?.registration}</small><b>{s.originCity} → {s.destinationCity}</b><span>{s.cargoName} · arrivée dans {minutes}m {String(seconds).padStart(2,"0")}s</span></div><div className="routeProgress"><i style={{width:`${s.progressPercent}%`}}></i><span>{s.progressPercent}%</span></div><button className="gemSpeed" disabled={accelerate.isPending||company.gems<10} onClick={()=>accelerate.mutate(s.id)}>◆ Accélérer · 10</button></article>})}</div></>}<h3>Bourse de fret</h3><div className="missionGrid">{open.map(s=>{const truck=available.find(v=>Number(v.capacityKg)>=Number(s.weightKg));return <article className="missionCard" key={s.id}><div className="missionRef"><small>{s.reference}</small><b>{money(s.rewardCents)}</b></div><h3>{s.originCity} <span>→</span> {s.destinationCity}</h3><p>{s.cargoName}</p><dl><div><dt>Distance</dt><dd>{s.distanceKm.toLocaleString("fr-FR")} km</dd></div><div><dt>Durée</dt><dd>{Math.min(30,Math.max(2,Math.ceil(s.distanceKm/100)))} min</dd></div><div><dt>Charge</dt><dd>{Number(s.weightKg)/1000} t</dd></div></dl><button disabled={!truck||assign.isPending} onClick={()=>truck&&assign.mutate({shipmentId:s.id,vehicleId:truck.id})}>{truck?`Lancer avec ${truck.registration}`:"Aucun camion compatible"}</button></article>})}</div></section>
 }
 function WorldMap({shipments}:{shipments:Shipment[]}){return <Suspense fallback={<div className="empty">Initialisation du monde 3D…</div>}><IndustrialMap3D shipments={shipments}/></Suspense>}
-function Jobs({ data }: { data: Job[] }) {
+function Jobs({ data,company }: { data: Job[];company:Company }) {
   const qc = useQueryClient();
+  const [publishing,setPublishing]=useState(false);
+  const refresh=()=>qc.invalidateQueries({ queryKey: ["jobs"] });
   const apply = useMutation({
     mutationFn: (id: string) =>
       api(`/job-offers/${id}/apply`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["jobs"] }),
+    onSuccess: refresh,
   });
+  const publish=useMutation({mutationFn:(payload:{title:string;city:string;salaryCents:number})=>api(`/companies/${company.id}/job-offers`,{method:"POST",body:JSON.stringify(payload)}),onSuccess:()=>{setPublishing(false);refresh()}});
+  const hire=useMutation({mutationFn:({jobId,contractId}:{jobId:string;contractId:string})=>api(`/job-offers/${jobId}/contracts/${contractId}/hire`,{method:"POST"}),onSuccess:refresh});
+  const submitJob=(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget));publish.mutate({title:String(values.title),city:String(values.city),salaryCents:Math.round(Number(values.salary)*100)})};
+  const error=apply.error||publish.error||hire.error;
   return (
-    <section>
+    <section className="jobsPage">
       <div className="sectionTitle">
         <div>
-          <small>CARRIÈRES</small>
-          <h2>Offres d’emploi</h2>
+          <small>MARCHÉ MULTIJOUEUR · ACTUALISATION EN DIRECT</small>
+          <h2>Offres d’emploi des entreprises</h2>
         </div>
+        <button className="publishJob" onClick={()=>setPublishing(value=>!value)}>{publishing?"Fermer":"+ Publier une offre"}</button>
       </div>
+      {publishing&&<form className="jobComposer" onSubmit={submitJob}><label>Poste<input name="title" required minLength={2} placeholder="Responsable logistique"/></label><label>Ville<input name="city" required placeholder="Lyon"/></label><label>Salaire mensuel (€)<input name="salary" required type="number" min="1000" step="50" placeholder="3200"/></label><button disabled={publish.isPending}>Publier en temps réel</button></form>}
+      {error&&<p className="error">{error.message}</p>}
+      <div className="liveJobs"><span></span> Marché en direct · {data.length} offre(s) ouverte(s)</div>
       <div className="jobs">
-        {data.map((j) => (
-          <article className="card" key={j.id}>
+        {data.map((j) => {const own=j.company.id===company.id;return (
+          <article className={`card jobCard ${own?"owned":""}`} key={j.id}>
             <small>
               {j.company.name} · {j.city}
             </small>
             <strong>{j.title}</strong>
             <span>{money(j.salaryCents)} / mois</span>
-            <button onClick={() => apply.mutate(j.id)}>Postuler</button>
+            <div className="applicantCount">{j.applicants.length} candidature(s)</div>
+            {own?<div className="applicantList">{j.applicants.length?j.applicants.map(candidate=><div key={candidate.id}><span className="candidateAvatar">{candidate.displayName[0]}</span><b>{candidate.displayName}</b><button disabled={hire.isPending} onClick={()=>hire.mutate({jobId:j.id,contractId:candidate.id})}>Embaucher</button></div>):<p>En attente de candidats joueurs…</p>}</div>:<button disabled={apply.isPending||j.applied} onClick={() => apply.mutate(j.id)}>{j.applied?"Candidature envoyée ✓":"Postuler"}</button>}
           </article>
-        ))}
+        )})}
       </div>
     </section>
   );
