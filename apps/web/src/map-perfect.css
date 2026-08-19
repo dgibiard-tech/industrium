@@ -1,0 +1,10 @@
+.mapViewControls { display:inline-flex; gap:4px; margin-right:12px; padding:4px; background:#101820; border:1px solid #3e4d56; }
+.mapViewControls button { border:0; background:transparent; color:#81909a; padding:6px 9px; font-size:8px; text-transform:uppercase; cursor:pointer; }
+.mapViewControls button.active { background:#c85f1d; color:#fff; box-shadow:0 0 15px #db6e2b66; }
+.worldLiveBar { position:absolute; z-index:3; left:16px; right:16px; bottom:14px; display:flex; gap:18px; align-items:center; padding:9px 12px; background:#0b141acc; border:1px solid #40515b; backdrop-filter:blur(10px); pointer-events:none; }
+.worldLiveBar span { color:#70d99a; font-size:8px; letter-spacing:1.2px; }
+.worldLiveBar span i { display:inline-block; width:7px; height:7px; border-radius:50%; background:#62e390; box-shadow:0 0 10px #62e390; margin-right:5px; }
+.worldLiveBar b { font-size:8px; color:#b4c0c6; font-weight:600; }
+.map3d .mapPanel { bottom:58px; background:linear-gradient(145deg,#101b22ee,#17242bec); border-color:#3d7388; }
+.map3d:after { content:""; position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 80px #05101666; }
+@media(max-width:700px){.mapViewControls{display:flex;margin:0 0 7px}.worldLiveBar b:nth-last-child(-n+2){display:none}.worldLiveBar{left:8px;right:8px}.map3d .mapPanel{bottom:55px}}

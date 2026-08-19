@@ -1,4 +1,5 @@
 import React from 'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{App}from'./App';import'./styles.css';import'./game.css';import'./world-market.css';import'./logistics.css';import'./vehicle-catalog.css';import'./vehicle-market.css';import'./maintenance.css';import'./jobs.css';import'./factory.css';import'./map3d.css';import'./art-direction.css';
 import './fleet-network.css';
 import './facility-modern.css';
+import './map-perfect.css';
 createRoot(document.getElementById('root')!).render(<React.StrictMode><QueryClientProvider client={new QueryClient()}><App/></QueryClientProvider></React.StrictMode>);

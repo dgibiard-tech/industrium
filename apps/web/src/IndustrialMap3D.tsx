@@ -146,6 +146,42 @@ function addTree(scene: THREE.Scene, x: number, z: number, size: number) {
   scene.add(group);
 }
 
+function addWorldDetails(scene: THREE.Scene) {
+  const animations: Array<(time: number) => void> = [];
+  const horizonTexture = new THREE.TextureLoader().load("/assets/industrial-valley-horizon-v1.png");
+  horizonTexture.colorSpace = THREE.SRGBColorSpace;
+  const horizon = new THREE.Mesh(new THREE.PlaneGeometry(190, 107), new THREE.MeshBasicMaterial({ map: horizonTexture, toneMapped: false }));
+  horizon.position.set(0, 31, -76);
+  scene.add(horizon);
+
+  for (const [x, z, rotation] of [[-43,-22,0.1],[39,-7,-0.2],[-8,35,0.25]] as const) {
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(.22,.55,12,12), material(0xdce6e8,.22,.35));
+    tower.position.set(x,6,z); scene.add(tower);
+    const rotor = new THREE.Group(); rotor.position.set(x,12,z); rotor.rotation.y=rotation;
+    for(let blade=0;blade<3;blade++){const arm=box(.28,5,.18,material(0xf0f5f5,.15,.3),0,2.5,0);arm.rotation.z=blade*Math.PI*2/3;rotor.add(arm)}
+    scene.add(rotor); animations.push(time=>{rotor.rotation.z=time*.55});
+  }
+  for(let i=0;i<16;i++){
+    const angle=i/16*Math.PI*2, radius=31+(i%3)*5;
+    const house=new THREE.Group(); house.position.set(Math.cos(angle)*radius,0,Math.sin(angle)*radius);
+    house.add(box(3.6,2.2,3,material(i%3===0?0xd5c4a5:0xaeb8bc),0,1.1,0));
+    const roof=new THREE.Mesh(new THREE.ConeGeometry(2.65,1.4,4),material(i%2?0x7c392c:0x465b66));roof.position.y=2.9;roof.rotation.y=Math.PI/4;house.add(roof);scene.add(house);
+  }
+  for(let i=0;i<22;i++){
+    const x=-36+i*3.45;
+    const pole=box(.12,3.5,.12,material(0x263239,.6),x,1.75,7);scene.add(pole);
+    const lamp=box(.45,.12,.2,new THREE.MeshStandardMaterial({color:0xffe2a2,emissive:0xffb347,emissiveIntensity:2}),x,3.45,7);scene.add(lamp);
+  }
+  for(let i=0;i<18;i++){
+    const panel=box(3,.12,1.65,new THREE.MeshStandardMaterial({color:0x163f5c,metalness:.65,roughness:.2}),-41+(i%6)*3.4,.55,-34+Math.floor(i/6)*2.2);panel.rotation.x=-.25;scene.add(panel);
+  }
+  for(let i=0;i<5;i++){
+    const car=new THREE.Group();car.add(box(1.05,.5,2,material([0x2ea5d0,0xe4b43c,0xd94d44,0xe8ecee,0x4f6575][i]),0,.45,0));car.position.set(-31+i*9,.12,6.3);scene.add(car);
+    animations.push(time=>{car.position.x=-40+((time*(2.4+i*.16)+i*13)%80);});
+  }
+  return animations;
+}
+
 function addTruck(scene: THREE.Scene, shipment: Shipment, index: number) {
   const group = new THREE.Group();
   const cab = material(index % 2 ? 0x46535b : 0xcf641c, 0.52, 0.34),
@@ -227,6 +263,7 @@ function addLandscape(scene: THREE.Scene) {
 
 function addExterior(scene: THREE.Scene, active: Shipment[]) {
   addLandscape(scene);
+  const animations=addWorldDetails(scene);
   addFactory(scene, -19, -10, "Usine Métallurgique Nord", 1.12);
   addFactory(scene, 25, -22, "Complexe d’Assemblage Atlas", 0.78);
   addWarehouse(scene, 15, 18, "Entrepôt Logistique Central", 0.22);
@@ -256,6 +293,7 @@ function addExterior(scene: THREE.Scene, active: Shipment[]) {
   return {
     hubs,
     trucks: active.map((shipment, i) => addTruck(scene, shipment, i)),
+    animations,
   };
 }
 
@@ -419,6 +457,7 @@ export default function IndustrialMap3D({
   const [selection, setSelection] = useState<Selection>(null);
   const [interior, setInterior] = useState<Interior>(null);
   const [activeZone, setActiveZone] = useState(0);
+  const [mapView, setMapView] = useState<"regional" | "sites" | "traffic">("regional");
   const active = shipments.filter(
     (s) => s.status === "ASSIGNED" || s.status === "IN_TRANSIT",
   );
@@ -439,11 +478,8 @@ export default function IndustrialMap3D({
       0.1,
       500,
     );
-    camera.position.set(
-      interior ? 29 : 50,
-      interior ? 16 : 43,
-      interior ? 30 : 61,
-    );
+    const exteriorCamera = mapView === "sites" ? [38,24,42] : mapView === "traffic" ? [8,15,39] : [50,43,61];
+    camera.position.set(interior ? 29 : exteriorCamera[0], interior ? 16 : exteriorCamera[1], interior ? 30 : exteriorCamera[2]);
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: "high-performance",
@@ -546,6 +582,7 @@ export default function IndustrialMap3D({
           truck.position.y = 0.2;
           truck.lookAt(world.hubs[segment + 1]);
         });
+      world?.animations.forEach((update) => update(t));
       interiorAnimations.forEach((update) => update(t));
       controls.update();
       renderer.render(scene, camera);
@@ -574,7 +611,7 @@ export default function IndustrialMap3D({
       if (renderer.domElement.parentNode === host)
         host.removeChild(renderer.domElement);
     };
-  }, [activeKey, interior]);
+  }, [activeKey, interior, mapView]);
 
   const enterBuilding = () => {
     if (selection?.kind === "building") {
@@ -596,6 +633,9 @@ export default function IndustrialMap3D({
             </button>
           ) : (
             <>
+              <div className="mapViewControls">
+                {([['regional','Vue région'],['sites','Sites'],['traffic','Trafic']] as const).map(([mode,label]) => <button className={mapView===mode?'active':''} key={mode} onClick={()=>setMapView(mode)}>{label}</button>)}
+              </div>
               <span className="legend orange"></span> Convoi actif{" "}
               <span className="legend white"></span> Site visitable
             </>
@@ -609,15 +649,16 @@ export default function IndustrialMap3D({
             : "CLIQUEZ UN VÉHICULE OU UN BÂTIMENT · GLISSEZ POUR EXPLORER"}
         </div>
         {!interior && !selection && (
-          <div className="mapPanel">
-            <small>RÉSEAU LOGISTIQUE</small>
-            <strong>{active.length} convois actifs</strong>
-            <span>2 usines · 2 entrepôts visitables</span>
-            <span>
-              {shipments.filter((s) => s.status === "OPEN").length} contrats
-              disponibles
-            </span>
-          </div>
+          <>
+            <div className="worldLiveBar"><span><i /> MONDE EN DIRECT</span><b>4 sites connectés</b><b>{active.length} véhicules suivis</b><b>Énergie renouvelable 38 %</b></div>
+            <div className="mapPanel">
+              <small>RÉSEAU LOGISTIQUE</small>
+              <strong>{active.length} convois actifs</strong>
+              <span>2 usines · 2 entrepôts visitables</span>
+              <span>{shipments.filter((s) => s.status === "OPEN").length} contrats disponibles</span>
+              <span>16 quartiers · 3 éoliennes · 18 panneaux solaires</span>
+            </div>
+          </>
         )}
         {interior && (
           <>
