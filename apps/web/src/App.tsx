@@ -321,6 +321,7 @@ function Game() {
             vehicles={vehicles.data ?? []}
             shipments={shipments.data ?? []}
             market={vehicleMarket.data ?? []}
+            factory={factory.data}
           />
         ) : tab === "Carte" ? (
           <WorldMap shipments={shipments.data ?? []} onNavigate={setTab} />
@@ -339,7 +340,7 @@ function Game() {
   );
 }
 const gameUpdates=[
-  {title:"Bilan de flotte et fret longue distance",items:["Inventaire complet des missions livrées","Revenus, kilomètres et moyenne par transport","Résultats détaillés pour chaque camion de la flotte","12 nouvelles liaisons internationales de 2 180 à 3 660 km chaque jour"]},
+  {title:"Rentabilité logistique complète",items:["Coût par voyage : énergie, salarié et entretien","Prix du gazole au litre et consommation de chaque camion","Bénéfice net total et détaillé par véhicule","Inventaire des missions livrées et fret longue distance"]},
   {title:"Tour de contrôle des commandes",items:["Recherche, filtres et tri avancés","Indicateurs commerciaux et graphique des flux","Fiches détaillées avec facture, taxes et traçabilité"]},
   {title:"Défilement complet de l’interface",items:["Barres de défilement sur toutes les pages principales","Listes, terminaux et fenêtres 3D désormais défilables","Style industriel et adaptation mobile"]},
   {title:"Intérieurs industriels photoréalistes 360°",items:["Usines et entrepôts entièrement redessinés","Décors continus dans toutes les directions","Machines, racks, quais et zones de sécurité plus réalistes"]},
@@ -665,11 +666,13 @@ function Transport({
   vehicles,
   shipments,
   market,
+  factory,
 }: {
   company: Company;
   vehicles: Vehicle[];
   shipments: Shipment[];
   market: VehicleMarketListing[];
+  factory?: FactoryData;
 }) {
   const qc = useQueryClient();
   const [now, setNow] = useState(Date.now());
@@ -782,6 +785,33 @@ function Transport({
     (sum, shipment) => sum + shipment.distanceKm,
     0,
   );
+  const DIESEL_PRICE_CENTS = 186;
+  const ELECTRICITY_PRICE_CENTS = 29;
+  const tripCosts = (shipment: Shipment) => {
+    const vehicle = shipment.vehicle;
+    const electric = vehicle?.type.toLowerCase().includes("électrique") ?? false;
+    const consumption = electric
+      ? vehicle?.model.includes("Nova") ? 27 : 92
+      : 31;
+    const energyQuantity = shipment.distanceKm * consumption / 100;
+    const energyCost = energyQuantity * (electric ? ELECTRICITY_PRICE_CENTS : DIESEL_PRICE_CENTS);
+    const tripHours = Math.max(2, shipment.distanceKm / 72 + 1.5);
+    const employeeIndex = completed.findIndex((item) => item.id === shipment.id);
+    const employee = factory?.employees.length
+      ? factory.employees[Math.abs(employeeIndex) % factory.employees.length]
+      : undefined;
+    const hourlyEmployeeCost = employee
+      ? Number(employee.salaryCents) / 151.67
+      : 2400;
+    const employeeCost = hourlyEmployeeCost * tripHours;
+    const maintenanceCost = shipment.distanceKm * (electric ? 11 : 18);
+    const total = energyCost + employeeCost + maintenanceCost;
+    return {electric, consumption, energyQuantity, energyCost, tripHours, employee, employeeCost, maintenanceCost, total, net:Number(shipment.rewardCents)-total};
+  };
+  const totalFleetCosts = completed.reduce(
+    (sum, shipment) => sum + tripCosts(shipment).total,
+    0,
+  );
   const truckResults = vehicles
     .map((vehicle) => {
       const missions = completed.filter(
@@ -799,6 +829,7 @@ function Transport({
           (sum, shipment) => sum + shipment.distanceKm,
           0,
         ),
+        costs: missions.reduce((sum, shipment) => sum + tripCosts(shipment).total, 0),
       };
     })
     .sort((a, b) => b.revenue - a.revenue);
@@ -1060,11 +1091,12 @@ function Transport({
           <article><small>Missions terminées</small><strong>{completed.length}</strong><span>livraisons réussies</span></article>
           <article><small>Revenu total</small><strong>{money(totalFleetRevenue)}</strong><span>chiffre d’affaires flotte</span></article>
           <article><small>Distance livrée</small><strong>{completedDistance.toLocaleString("fr-FR")} km</strong><span>trajets accomplis</span></article>
-          <article><small>Revenu moyen</small><strong>{money(completed.length ? totalFleetRevenue / completed.length : 0)}</strong><span>par mission</span></article>
+          <article><small>Coûts d’exploitation</small><strong>{money(totalFleetCosts)}</strong><span>énergie, personnel, entretien</span></article>
+          <article className="netProfitKpi"><small>Bénéfice net</small><strong>{money(totalFleetRevenue-totalFleetCosts)}</strong><span>après tous les coûts</span></article>
         </div>
         <h4>Résultats par camion</h4>
         <div className="truckResults">
-          {truckResults.length ? truckResults.map(({vehicle, missions, revenue, distance}, index) => (
+          {truckResults.length ? truckResults.map(({vehicle, missions, revenue, distance, costs}, index) => (
             <article key={vehicle.id} className="truckResultCard">
               <div className="truckResultRank">#{index + 1}</div>
               <img src={vehicleImage(vehicle.model)} alt={vehicle.model} />
@@ -1073,7 +1105,8 @@ function Transport({
                 <div><dt>Missions</dt><dd>{missions.length}</dd></div>
                 <div><dt>Revenu généré</dt><dd>{money(revenue)}</dd></div>
                 <div><dt>Kilomètres livrés</dt><dd>{distance.toLocaleString("fr-FR")} km</dd></div>
-                <div><dt>Moyenne / mission</dt><dd>{money(missions.length ? revenue / missions.length : 0)}</dd></div>
+                <div><dt>Charges</dt><dd className="costValue">− {money(costs)}</dd></div>
+                <div><dt>Bénéfice net</dt><dd className="profitValue">{money(revenue-costs)}</dd></div>
               </dl>
             </article>
           )) : <div className="emptyFleet">Achetez un camion pour démarrer votre bilan logistique.</div>}
@@ -1086,15 +1119,22 @@ function Transport({
           </select>
         </div>
         <div className="missionHistory">
-          {visibleHistory.length ? visibleHistory.map((shipment) => (
-            <article key={shipment.id}>
+          {visibleHistory.length ? visibleHistory.map((shipment) => {
+            const costs=tripCosts(shipment);
+            return <article key={shipment.id}>
               <div className="missionHistoryStatus"><i />LIVRÉE</div>
               <div><small>{shipment.reference}</small><b>{shipment.originCity} → {shipment.destinationCity}</b><span>{shipment.cargoName} · {(Number(shipment.weightKg) / 1000).toLocaleString("fr-FR")} t</span></div>
               <div><small>CAMION</small><b>{shipment.vehicle?.registration ?? "Non renseigné"}</b><span>{shipment.vehicle?.model ?? "Véhicule archivé"}</span></div>
               <div><small>DATE DE LIVRAISON</small><b>{shipment.deliveredAt || shipment.arrivesAt ? new Date((shipment.deliveredAt ?? shipment.arrivesAt)!).toLocaleDateString("fr-FR") : "Historique"}</b><span>{shipment.distanceKm.toLocaleString("fr-FR")} km</span></div>
-              <strong>{money(shipment.rewardCents)}</strong>
+              <div className="tripAccounting">
+                <small>COMPTE DU VOYAGE</small>
+                <span>{costs.electric ? "Électricité" : "Gazole"} : {costs.energyQuantity.toLocaleString("fr-FR",{maximumFractionDigits:1})} {costs.electric ? "kWh" : "L"} × {(costs.electric ? ELECTRICITY_PRICE_CENTS/100 : DIESEL_PRICE_CENTS/100).toLocaleString("fr-FR",{style:"currency",currency:"EUR"})}</span>
+                <span>Énergie : − {money(costs.energyCost)} · entretien : − {money(costs.maintenanceCost)}</span>
+                <span>{costs.employee?.user.displayName ?? "Chauffeur intérimaire"} ({costs.employee?.jobOffer.title ?? "Conducteur"}) : {costs.tripHours.toLocaleString("fr-FR",{maximumFractionDigits:1})} h · − {money(costs.employeeCost)}</span>
+                <b>Revenu {money(shipment.rewardCents)} · coûts − {money(costs.total)} · net <em>{money(costs.net)}</em></b>
+              </div>
             </article>
-          )) : <div className="emptyHistory">Aucune mission terminée pour ce véhicule. Les prochaines livraisons apparaîtront automatiquement ici.</div>}
+          }) : <div className="emptyHistory">Aucune mission terminée pour ce véhicule. Les prochaines livraisons apparaîtront automatiquement ici.</div>}
         </div>
       </section>
       <h3>Marché international des véhicules</h3>

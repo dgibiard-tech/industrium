@@ -2,6 +2,14 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Rentabilité logistique complète
+
+- Ajout du prix du gazole au litre et de la consommation réelle estimée par modèle.
+- Calcul du coût énergétique de chaque voyage, avec électricité séparée pour les véhicules électriques.
+- Affectation d'un employé à chaque mission et calcul de son coût selon son salaire et les heures du trajet.
+- Ajout des frais d'entretien, des charges totales et du bénéfice net par voyage et par camion.
+- Ajout du bénéfice net consolidé de toute la flotte.
+
 ## 19 août 2026 — Bilan de flotte et fret longue distance
 
 - Ajout d'un inventaire complet des missions de transport terminées.
