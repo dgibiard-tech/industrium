@@ -31,3 +31,7 @@ npm run build
 ```
 
 L’architecture détaillée, le modèle économique et la feuille de route sont dans [docs/architecture.md](docs/architecture.md).
+
+## Déploiement
+
+Pour Vercel, importer ce dépôt et choisir `apps/web` comme Root Directory. Ajouter ensuite la variable `VITE_API_URL` avec l’URL publique de l’API, terminée par `/api`. L’API NestJS, PostgreSQL et Redis doivent être hébergés séparément sur une plateforme acceptant des processus persistants, par exemple Railway.
