@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Headers, Injectable, NotFoundException, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { IsInt, IsPositive, IsString, Min, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsPositive, IsString, Min, MinLength } from 'class-validator';
 import { AuthRequest, JwtGuard } from './auth';
 import { PrismaService } from './prisma.service';
 
@@ -9,7 +9,14 @@ class ListingDto { @IsString() warehouseStockId!:string; @IsInt() @IsPositive() 
 class BuyDto { @IsString() buyerCompanyId!:string; @IsInt() @IsPositive() quantity!:number }
 class JobDto { @IsString() @MinLength(2) title!:string; @IsString() city!:string; @IsInt() @IsPositive() salaryCents!:number }
 class CompanyActionDto { @IsString() companyId!:string }
+class BuyVehicleDto extends CompanyActionDto { @IsString() @IsIn(['atlas-tx480','voltis-e18','nova-v6']) modelId!:string }
 class AssignShipmentDto extends CompanyActionDto { @IsString() vehicleId!:string }
+
+const vehicleCatalog={
+  'atlas-tx480':{model:'Atlas TX 480',type:'Semi-remorque diesel',capacityKg:24000,price:12_500_000n,prefix:'AT'},
+  'voltis-e18':{model:'Voltis E18',type:'Porteur électrique',capacityKg:12000,price:9_800_000n,prefix:'VE'},
+  'nova-v6':{model:'Nova V6 Urban',type:'Utilitaire électrique',capacityKg:3500,price:5_900_000n,prefix:'NV'},
+} as const;
 
 const companyView={account:true,warehouses:{include:{stocks:{include:{product:true}}}},members:true} as const;
 
@@ -75,15 +82,16 @@ export class GameService {
   async apply(userId:string,jobId:string){const job=await this.db.jobOffer.findUnique({where:{id:jobId}});if(!job||job.status!=='OPEN')throw new NotFoundException();return this.db.employeeContract.upsert({where:{userId_jobOfferId:{userId,jobOfferId:jobId}},create:{userId,jobOfferId:jobId,salaryCents:job.salaryCents},update:{}})}
   async vehicles(userId:string){return this.db.vehicle.findMany({where:{company:{members:{some:{userId}}}},orderBy:{createdAt:'asc'}})}
   shipments(userId:string){return this.db.shipment.findMany({where:{OR:[{status:'OPEN'},{carrier:{members:{some:{userId}}}}]},include:{carrier:{select:{name:true}},vehicle:true},orderBy:[{status:'asc'},{rewardCents:'desc'}]})}
-  async buyTruck(userId:string,dto:CompanyActionDto){
-    const price=12_500_000n;
+  async buyTruck(userId:string,dto:BuyVehicleDto){
+    const selected=vehicleCatalog[dto.modelId as keyof typeof vehicleCatalog];
+    const price=selected.price;
     return this.db.$transaction(async tx=>{
       const company=await tx.company.findFirst({where:{id:dto.companyId,members:{some:{userId,role:{in:['OWNER','MANAGER']}}}},include:{account:true}});
       if(!company?.account) throw new NotFoundException('Entreprise inaccessible');
       const debit=await tx.bankAccount.updateMany({where:{id:company.account.id,balanceCents:{gte:price}},data:{balanceCents:{decrement:price},version:{increment:1}}});
-      if(debit.count!==1) throw new BadRequestException('Trésorerie insuffisante pour ce camion');
-      const vehicle=await tx.vehicle.create({data:{companyId:company.id,registration:`TR-${Date.now().toString().slice(-6)}`,model:'Atlas TX 480',type:'Semi-remorque',capacityKg:24000,purchasePriceCents:price}});
-      await tx.ledgerTransaction.create({data:{accountId:company.account.id,type:'PURCHASE',amountCents:-price,description:'Achat camion Atlas TX 480',referenceId:vehicle.id}});
+      if(debit.count!==1) throw new BadRequestException('Trésorerie insuffisante pour ce véhicule');
+      const vehicle=await tx.vehicle.create({data:{companyId:company.id,registration:`${selected.prefix}-${Date.now().toString().slice(-6)}`,model:selected.model,type:selected.type,capacityKg:selected.capacityKg,purchasePriceCents:price}});
+      await tx.ledgerTransaction.create({data:{accountId:company.account.id,type:'PURCHASE',amountCents:-price,description:`Achat véhicule ${selected.model}`,referenceId:vehicle.id}});
       return vehicle;
     });
   }
@@ -125,7 +133,7 @@ export class GameController {
   @Post('companies/:id/job-offers') createJob(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:JobDto){return this.game.createJob(r.user.sub,id,d)}
   @Post('job-offers/:id/apply') apply(@Req() r:AuthRequest,@Param('id') id:string){return this.game.apply(r.user.sub,id)}
   @Get('vehicles') vehicles(@Req() r:AuthRequest){return this.game.vehicles(r.user.sub)}
-  @Post('vehicles/buy-truck') buyTruck(@Req() r:AuthRequest,@Body() d:CompanyActionDto){return this.game.buyTruck(r.user.sub,d)}
+  @Post('vehicles/buy-truck') buyTruck(@Req() r:AuthRequest,@Body() d:BuyVehicleDto){return this.game.buyTruck(r.user.sub,d)}
   @Get('shipments') shipments(@Req() r:AuthRequest){return this.game.shipments(r.user.sub)}
   @Post('shipments/:id/assign') assignShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:AssignShipmentDto){return this.game.assignShipment(r.user.sub,id,d)}
   @Post('shipments/:id/advance') advanceShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.advanceShipment(r.user.sub,id,d)}
