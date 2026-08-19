@@ -338,6 +338,7 @@ function Game() {
   );
 }
 const gameUpdates=[
+  {title:"Tour de contrôle des commandes",items:["Recherche, filtres et tri avancés","Indicateurs commerciaux et graphique des flux","Fiches détaillées avec facture, taxes et traçabilité"]},
   {title:"Défilement complet de l’interface",items:["Barres de défilement sur toutes les pages principales","Listes, terminaux et fenêtres 3D désormais défilables","Style industriel et adaptation mobile"]},
   {title:"Intérieurs industriels photoréalistes 360°",items:["Usines et entrepôts entièrement redessinés","Décors continus dans toutes les directions","Machines, racks, quais et zones de sécurité plus réalistes"]},
   {title:"Refonte panoramique et corrections de la carte",items:["Nouveau décor photoréaliste à 360° autour du monde","Routes et marquages stabilisés","Suppression des sauts de véhicules et des ruptures visuelles"]},
@@ -588,9 +589,15 @@ function Stocks({ company,onNavigate }: { company: Company;onNavigate:(tab:strin
 }
 function Orders({ data,company,onNavigate }: { data: GameOrder[];company:Company;onNavigate:(tab:string)=>void }) {
   const [filter,setFilter]=useState<"ALL"|"BUY"|"SELL">("ALL");
-  const visible=data.filter(order=>filter==="ALL"||(filter==="BUY"?order.buyer.id===company.id:order.seller.id===company.id));
+  const [search,setSearch]=useState("");
+  const [sort,setSort]=useState<"RECENT"|"VALUE">("RECENT");
+  const [selected,setSelected]=useState<GameOrder|null>(null);
+  const sales=data.filter(o=>o.seller.id===company.id),purchases=data.filter(o=>o.buyer.id===company.id),salesValue=sales.reduce((sum,o)=>sum+BigInt(o.totalCents),0n),purchaseValue=purchases.reduce((sum,o)=>sum+BigInt(o.totalCents),0n);
+  const visible=data.filter(order=>(filter==="ALL"||(filter==="BUY"?order.buyer.id===company.id:order.seller.id===company.id))&&`${order.id} ${order.items.map(item=>item.product.name).join(" ")} ${order.buyer.name} ${order.seller.name} ${order.origin.country}`.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>sort==="VALUE"?Number(BigInt(b.totalCents)-BigInt(a.totalCents)):new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime());
+  const maxOrder=Math.max(1,...data.slice(0,8).map(order=>Number(order.totalCents)));
   return (
     <section className="orderControl">
+      <div className="orderHero"><div><small>ORDER MANAGEMENT SYSTEM · LIVE</small><h2>Tour de contrôle commerciale</h2><p>Supervision des achats, ventes, paiements, préparations et livraisons internationales.</p></div><div className="orderLive"><i/> SYNCHRONISATION ACTIVE<span>{data.length} flux contrôlés</span></div></div>
       <div className="sectionTitle">
         <div>
           <small>OMS · FLUX COMMERCIAUX EN DIRECT</small>
@@ -598,19 +605,21 @@ function Orders({ data,company,onNavigate }: { data: GameOrder[];company:Company
         </div>
         <button onClick={()=>onNavigate("Marché mondial")}>+ Nouvelle commande</button>
       </div>
-      <div className="orderMetrics"><Card label="Commandes" value={String(data.length)} delta="historique total"/><Card label="Achats" value={String(data.filter(o=>o.buyer.id===company.id).length)} delta="entrées de stock"/><Card label="Ventes" value={String(data.filter(o=>o.seller.id===company.id).length)} delta="sorties de stock"/><Card label="Valeur échangée" value={money(data.reduce((sum,o)=>sum+BigInt(o.totalCents),0n))} delta="volume cumulé"/></div>
-      <div className="orderFilters">{([['ALL','Toutes'],['BUY','Achats'],['SELL','Ventes']] as const).map(([value,label])=><button className={filter===value?"active":""} key={value} onClick={()=>setFilter(value)}>{label}</button>)}</div>
+      <div className="orderMetrics"><Card label="Commandes" value={String(data.length)} delta="historique total"/><Card label="Chiffre d’affaires" value={money(salesValue)} delta={`${sales.length} vente(s)`}/><Card label="Dépenses achats" value={money(purchaseValue)} delta={`${purchases.length} achat(s)`}/><Card label="Solde commercial" value={money(salesValue-purchaseValue)} delta={salesValue>=purchaseValue?"excédent":"déficit"}/></div>
+      <div className="orderAnalytics"><div><small>VOLUME DES DERNIERS FLUX</small><div className="orderBars">{data.slice(0,8).reverse().map(order=><i key={order.id} style={{height:`${Math.max(12,Number(order.totalCents)/maxOrder*100)}%`}} title={money(order.totalCents)}/>)}</div></div><dl><div><dt>Panier moyen</dt><dd>{money(data.length?data.reduce((sum,o)=>sum+BigInt(o.totalCents),0n)/BigInt(data.length):0)}</dd></div><div><dt>Taux livré</dt><dd>{data.length?Math.round(data.filter(o=>o.status==="COMPLETED").length/data.length*100):0}%</dd></div><div><dt>Pays fournisseurs</dt><dd>{new Set(purchases.map(o=>o.origin.country)).size}</dd></div></dl></div>
+      <div className="orderCommandBar"><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Rechercher une commande, un produit, une entreprise ou un pays…"/><div className="orderFilters">{([['ALL','Toutes'],['BUY','Achats'],['SELL','Ventes']] as const).map(([value,label])=><button className={filter===value?"active":""} key={value} onClick={()=>setFilter(value)}>{label}</button>)}</div><select value={sort} onChange={event=>setSort(event.target.value as "RECENT"|"VALUE")}><option value="RECENT">Plus récentes</option><option value="VALUE">Valeur décroissante</option></select></div>
       <div className="orderList">
         {visible.map((o) => (
           <article key={o.id}>
             <header><div><small>CMD-{o.id.slice(-7).toUpperCase()} · {new Date(o.createdAt).toLocaleDateString("fr-FR")}</small><h3>{o.items[0]?.product.name}</h3></div><div className="orderAmount"><strong>{money(o.totalCents)}</strong><em>{o.status}</em></div></header>
             <div className="orderRoute"><span><i>{o.origin.code}</i>{o.seller.name}<small>{o.origin.city}, {o.origin.country}</small></span><b>→</b><span>{o.buyer.name}<small>Entrepôt destinataire</small></span><strong>{o.quantity} {o.items[0]?.product.unit}</strong></div>
             <div className="orderTimeline">{o.tracking.map((step,index)=><div className={step.done?"done":""} key={step.step}><i>{step.done?"✓":index+1}</i><span>{step.step}</span></div>)}</div>
-            <footer><span>{o.buyer.id===company.id?"ACHAT":"VENTE"} · {o.items[0]?.product.category}</span><button onClick={()=>onNavigate("Stocks")}>Voir le stock</button><button onClick={()=>onNavigate("Transport")}>Suivre le transport</button></footer>
+            <footer><span>{o.buyer.id===company.id?"ACHAT":"VENTE"} · {o.items[0]?.product.category}</span><button className="orderDetails" onClick={()=>setSelected(o)}>Détails / facture</button><button onClick={()=>onNavigate("Stocks")}>Voir le stock</button><button onClick={()=>onNavigate("Transport")}>Suivre le transport</button></footer>
           </article>
         ))}
         {!visible.length&&<div className="emptyFleet">Aucune commande dans cette catégorie.</div>}
       </div>
+      {selected&&<aside className="orderDrawer"><button className="closeOrder" onClick={()=>setSelected(null)}>×</button><small>DOSSIER DE COMMANDE</small><h2>CMD-{selected.id.slice(-7).toUpperCase()}</h2><span className="invoiceStatus">✓ PAYÉE ET LIVRÉE</span><div className="invoiceParties"><div><small>FOURNISSEUR</small><b>{selected.seller.name}</b><span>{selected.origin.city}, {selected.origin.country}</span></div><b>→</b><div><small>CLIENT</small><b>{selected.buyer.name}</b><span>Entrepôt destinataire</span></div></div><h3>Détail de la facture</h3><div className="invoiceLines">{selected.items.map(item=><div key={item.id}><span><b>{item.product.name}</b><small>{item.product.category}</small></span><em>{item.quantity} {item.product.unit}</em><strong>{money(item.unitPriceCents)} / u.</strong></div>)}</div><dl className="invoiceTotals"><div><dt>Sous-total HT</dt><dd>{money(BigInt(selected.totalCents)*100n/120n)}</dd></div><div><dt>Taxes estimées</dt><dd>{money(BigInt(selected.totalCents)-BigInt(selected.totalCents)*100n/120n)}</dd></div><div><dt>Total transaction</dt><dd>{money(selected.totalCents)}</dd></div></dl><div className="invoiceTrace"><small>TRAÇABILITÉ</small>{selected.tracking.map(step=><span key={step.step}><i>✓</i>{step.step}</span>)}</div><footer><button onClick={()=>onNavigate("Stocks")}>Ouvrir le stock</button><button onClick={()=>onNavigate("Transport")}>Ouvrir la logistique</button></footer></aside>}
     </section>
   );
 }

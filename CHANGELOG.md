@@ -2,6 +2,13 @@
 
 Toutes les évolutions publiées du jeu sont enregistrées ici, de la plus récente à la plus ancienne.
 
+## 19 août 2026 — Tour de contrôle des commandes
+
+- Refonte approfondie de la page Commandes avec recherche, filtres et tri.
+- Ajout des indicateurs de chiffre d’affaires, dépenses, solde commercial et panier moyen.
+- Ajout d’un graphique des derniers flux et d’un suivi du taux de livraison.
+- Nouvelle fiche détaillée avec facture, taxes, prix unitaires et traçabilité complète.
+
 ## 19 août 2026 — Défilement complet de l’interface
 
 - Ajout de barres de défilement industrielles sur toutes les pages principales.
