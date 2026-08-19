@@ -15,5 +15,14 @@ async function main(){
     if(await db.marketListing.count({where:{sellerId:company.id,productId:catalog.get(sku)!}})===0) await db.marketListing.create({data:{sellerId:company.id,productId:catalog.get(sku)!,warehouseStockId:stock.id,quantity:qty,unitPriceCents:price}});
     if(await db.jobOffer.count({where:{companyId:company.id}})===0) await db.jobOffer.create({data:{companyId:company.id,title:sku==='STEEL'?'Technicien de production':'Responsable logistique',city,salaryCents:sku==='STEEL'?340000:390000}});
   }
+  const missions=[
+    ['FRET-2401','Batteries industrielles',18000,'Lyon','Berlin',1050,180000],
+    ['FRET-2402','Composants électroniques',8500,'Grenoble','Turin',325,72000],
+    ['FRET-2403','Acier laminé',22000,'Duisbourg','Lyon',780,145000],
+    ['FRET-2404','Équipements automobiles',12000,'Gdańsk','Paris',1540,260000]
+  ] as const;
+  for(const [reference,cargoName,weightKg,originCity,destinationCity,distanceKm,rewardCents] of missions){
+    await db.shipment.upsert({where:{reference},update:{},create:{reference,cargoName,weightKg,originCity,destinationCity,distanceKm,rewardCents}});
+  }
 }
 main().finally(()=>db.$disconnect());

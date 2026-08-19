@@ -46,6 +46,17 @@ enum ContractStatus {
   RESIGNED
   TERMINATED
 }
+enum VehicleStatus {
+  AVAILABLE
+  ASSIGNED
+  MAINTENANCE
+}
+enum ShipmentStatus {
+  OPEN
+  ASSIGNED
+  IN_TRANSIT
+  DELIVERED
+}
 model User {
   id String @id @default(cuid())
   email String @unique
@@ -79,6 +90,43 @@ model Company {
   purchaseOrders Order[] @relation("buyer")
   saleOrders Order[] @relation("seller")
   jobOffers JobOffer[]
+  vehicles Vehicle[]
+  shipments Shipment[] @relation("carrier")
+}
+model Vehicle {
+  id String @id @default(cuid())
+  registration String @unique
+  model String
+  type String
+  capacityKg Decimal @db.Decimal(16, 2)
+  mileageKm Decimal @default(0) @db.Decimal(16, 1)
+  condition Int @default(100)
+  purchasePriceCents BigInt
+  status VehicleStatus @default(AVAILABLE)
+  companyId String
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  shipments Shipment[]
+  createdAt DateTime @default(now())
+}
+model Shipment {
+  id String @id @default(cuid())
+  reference String @unique
+  cargoName String
+  weightKg Decimal @db.Decimal(16, 2)
+  originCity String
+  destinationCity String
+  distanceKm Int
+  rewardCents BigInt
+  status ShipmentStatus @default(OPEN)
+  progressPercent Int @default(0)
+  carrierId String?
+  vehicleId String?
+  carrier Company? @relation("carrier", fields: [carrierId], references: [id])
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id])
+  acceptedAt DateTime?
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([status, createdAt])
 }
 model CompanyMember {
   id String @id @default(cuid())

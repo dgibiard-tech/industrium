@@ -8,6 +8,8 @@ class CompanyDto { @IsString() @MinLength(2) name!:string; @IsString() sector!:s
 class ListingDto { @IsString() warehouseStockId!:string; @IsInt() @IsPositive() quantity!:number; @IsInt() @IsPositive() unitPriceCents!:number }
 class BuyDto { @IsString() buyerCompanyId!:string; @IsInt() @IsPositive() quantity!:number }
 class JobDto { @IsString() @MinLength(2) title!:string; @IsString() city!:string; @IsInt() @IsPositive() salaryCents!:number }
+class CompanyActionDto { @IsString() companyId!:string }
+class AssignShipmentDto extends CompanyActionDto { @IsString() vehicleId!:string }
 
 const companyView={account:true,warehouses:{include:{stocks:{include:{product:true}}}},members:true} as const;
 
@@ -71,6 +73,44 @@ export class GameService {
   jobs(){return this.db.jobOffer.findMany({where:{status:'OPEN'},include:{company:{select:{name:true}}},orderBy:{createdAt:'desc'}})}
   async createJob(userId:string,companyId:string,dto:JobDto){const allowed=await this.db.companyMember.findFirst({where:{companyId,userId,role:{in:['OWNER','MANAGER']}}});if(!allowed) throw new NotFoundException();return this.db.jobOffer.create({data:{...dto,salaryCents:BigInt(dto.salaryCents),companyId}})}
   async apply(userId:string,jobId:string){const job=await this.db.jobOffer.findUnique({where:{id:jobId}});if(!job||job.status!=='OPEN')throw new NotFoundException();return this.db.employeeContract.upsert({where:{userId_jobOfferId:{userId,jobOfferId:jobId}},create:{userId,jobOfferId:jobId,salaryCents:job.salaryCents},update:{}})}
+  async vehicles(userId:string){return this.db.vehicle.findMany({where:{company:{members:{some:{userId}}}},orderBy:{createdAt:'asc'}})}
+  shipments(userId:string){return this.db.shipment.findMany({where:{OR:[{status:'OPEN'},{carrier:{members:{some:{userId}}}}]},include:{carrier:{select:{name:true}},vehicle:true},orderBy:[{status:'asc'},{rewardCents:'desc'}]})}
+  async buyTruck(userId:string,dto:CompanyActionDto){
+    const price=12_500_000n;
+    return this.db.$transaction(async tx=>{
+      const company=await tx.company.findFirst({where:{id:dto.companyId,members:{some:{userId,role:{in:['OWNER','MANAGER']}}}},include:{account:true}});
+      if(!company?.account) throw new NotFoundException('Entreprise inaccessible');
+      const debit=await tx.bankAccount.updateMany({where:{id:company.account.id,balanceCents:{gte:price}},data:{balanceCents:{decrement:price},version:{increment:1}}});
+      if(debit.count!==1) throw new BadRequestException('Trésorerie insuffisante pour ce camion');
+      const vehicle=await tx.vehicle.create({data:{companyId:company.id,registration:`TR-${Date.now().toString().slice(-6)}`,model:'Atlas TX 480',type:'Semi-remorque',capacityKg:24000,purchasePriceCents:price}});
+      await tx.ledgerTransaction.create({data:{accountId:company.account.id,type:'PURCHASE',amountCents:-price,description:'Achat camion Atlas TX 480',referenceId:vehicle.id}});
+      return vehicle;
+    });
+  }
+  async assignShipment(userId:string,shipmentId:string,dto:AssignShipmentDto){
+    return this.db.$transaction(async tx=>{
+      const vehicle=await tx.vehicle.findFirst({where:{id:dto.vehicleId,companyId:dto.companyId,status:'AVAILABLE',company:{members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}}});
+      const shipment=await tx.shipment.findUnique({where:{id:shipmentId}});
+      if(!vehicle||!shipment||shipment.status!=='OPEN') throw new BadRequestException('Mission ou véhicule indisponible');
+      if(vehicle.capacityKg.lt(shipment.weightKg)) throw new BadRequestException('Capacité du véhicule insuffisante');
+      const claimed=await tx.shipment.updateMany({where:{id:shipment.id,status:'OPEN'},data:{carrierId:dto.companyId,vehicleId:vehicle.id,status:'ASSIGNED',acceptedAt:new Date()}});
+      if(claimed.count!==1) throw new BadRequestException('Mission déjà attribuée');
+      await tx.vehicle.update({where:{id:vehicle.id},data:{status:'ASSIGNED'}});
+      return tx.shipment.findUniqueOrThrow({where:{id:shipment.id},include:{vehicle:true}});
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
+  }
+  async advanceShipment(userId:string,shipmentId:string,dto:CompanyActionDto){
+    return this.db.$transaction(async tx=>{
+      const shipment=await tx.shipment.findFirst({where:{id:shipmentId,carrierId:dto.companyId,carrier:{members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}},include:{vehicle:true,carrier:{include:{account:true}}}});
+      if(!shipment?.vehicle||!shipment.carrier?.account||shipment.status==='DELIVERED'||shipment.status==='OPEN') throw new BadRequestException('Mission impossible à avancer');
+      const progress=Math.min(100,shipment.progressPercent+25);
+      if(progress<100) return tx.shipment.update({where:{id:shipment.id},data:{progressPercent:progress,status:'IN_TRANSIT'}});
+      await tx.vehicle.update({where:{id:shipment.vehicle.id},data:{status:'AVAILABLE',mileageKm:{increment:shipment.distanceKm},condition:{decrement:2}}});
+      await tx.bankAccount.update({where:{id:shipment.carrier.account.id},data:{balanceCents:{increment:shipment.rewardCents},version:{increment:1}}});
+      await tx.ledgerTransaction.create({data:{accountId:shipment.carrier.account.id,type:'SALE',amountCents:shipment.rewardCents,description:`Livraison ${shipment.reference}`,referenceId:shipment.id}});
+      return tx.shipment.update({where:{id:shipment.id},data:{progressPercent:100,status:'DELIVERED',deliveredAt:new Date()}});
+    });
+  }
 }
 
 @Controller()
@@ -84,6 +124,11 @@ export class GameController {
   @Get('orders') orders(@Req() r:AuthRequest){return this.game.orders(r.user.sub)} @Get('job-offers') jobs(){return this.game.jobs()}
   @Post('companies/:id/job-offers') createJob(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:JobDto){return this.game.createJob(r.user.sub,id,d)}
   @Post('job-offers/:id/apply') apply(@Req() r:AuthRequest,@Param('id') id:string){return this.game.apply(r.user.sub,id)}
+  @Get('vehicles') vehicles(@Req() r:AuthRequest){return this.game.vehicles(r.user.sub)}
+  @Post('vehicles/buy-truck') buyTruck(@Req() r:AuthRequest,@Body() d:CompanyActionDto){return this.game.buyTruck(r.user.sub,d)}
+  @Get('shipments') shipments(@Req() r:AuthRequest){return this.game.shipments(r.user.sub)}
+  @Post('shipments/:id/assign') assignShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:AssignShipmentDto){return this.game.assignShipment(r.user.sub,id,d)}
+  @Post('shipments/:id/advance') advanceShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.advanceShipment(r.user.sub,id,d)}
 }
 
 export function assertPurchase(quantity:number, available:number, balanceCents:bigint, unitPriceCents:bigint){if(quantity<=0||quantity>available)throw new Error('Stock insuffisant');const total=BigInt(quantity)*unitPriceCents;if(total>balanceCents)throw new Error('Trésorerie insuffisante');return total}
