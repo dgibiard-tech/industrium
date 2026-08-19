@@ -15,6 +15,7 @@ class ListVehicleDto extends CompanyActionDto { @IsInt() @IsPositive() askingPri
 class EquipmentDto extends CompanyActionDto { @IsString() @IsIn(['ASSEMBLY_LINE','ELECTRONICS_LINE','WOODWORK_LINE','ROBOTICS']) kind!:string }
 class ProductionDto extends CompanyActionDto { @IsString() @IsIn(['VEHICLE','COMPUTER','FURNITURE']) productType!:'VEHICLE'|'COMPUTER'|'FURNITURE'; @IsInt() @Min(1) quantity!:number }
 class ProposalDto { @IsString() buyerCompanyId!:string; @IsInt() @IsPositive() quantity!:number; @IsInt() @IsPositive() proposedUnitPriceCents!:number }
+class AutoDispatchDto extends CompanyActionDto { @IsInt() @Min(1) maxTransports!:number }
 
 const vehicleCatalog={
   'atlas-tx480':{model:'Atlas TX 480',type:'Semi-remorque diesel',capacityKg:24000,price:12_500_000n,prefix:'AT'},
@@ -24,6 +25,9 @@ const vehicleCatalog={
 
 const companyView={account:true,warehouses:{include:{stocks:{include:{product:true}}}},members:true} as const;
 const ACCELERATION_GEM_COST=10;
+const DAILY_TRANSPORT_TARGET=30;
+const logisticsRoutes=[['Paris','Lyon',465],['Lyon','Berlin',1050],['Marseille','Barcelone',505],['Lille','Amsterdam',290],['Bordeaux','Madrid',690],['Strasbourg','Munich',360],['Nantes','Bruxelles',590],['Grenoble','Turin',325],['Duisbourg','Lyon',780],['Gdańsk','Paris',1540],['Milan','Zurich',280],['Prague','Vienne',335]] as const;
+const logisticsCargo=[['Composants électroniques',3200],['Batteries industrielles',10500],['Mobilier professionnel',6800],['Pièces automobiles',14200],['Équipements médicaux',2400],['Acier usiné',22000],['Ordinateurs professionnels',1800],['Machines-outils',11800]] as const;
 const shipmentDurationMs=(distanceKm:number)=>Math.min(30,Math.max(2,Math.ceil(distanceKm/100)))*60_000;
 const vehicleValue=(purchasePriceCents:bigint,condition:number,mileageKm:number)=>purchasePriceCents*BigInt(Math.max(3000,condition*100-Math.min(5000,Math.floor(mileageKm/50))))/10_000n;
 const equipmentCatalog={ASSEMBLY_LINE:{name:'Ligne d’assemblage automobile',price:50_000_000n},ELECTRONICS_LINE:{name:'Ligne électronique automatisée',price:25_000_000n},WOODWORK_LINE:{name:'Atelier mobilier CNC',price:12_000_000n},ROBOTICS:{name:'Cellules robotisées',price:40_000_000n}} as const;
@@ -32,6 +36,16 @@ const productionCatalog={VEHICLE:{name:'Véhicule Industrium',sku:'FACTORY_VEHIC
 @Injectable()
 export class GameService {
   constructor(private readonly db:PrismaService){}
+  private dayStart(){const date=new Date();date.setHours(0,0,0,0);return date}
+  private async ensureDailyTransportNetwork(){
+    const day=this.dayStart();const existing=await this.db.shipment.count({where:{createdAt:{gte:day}}});
+    for(let index=existing;index<DAILY_TRANSPORT_TARGET;index++){
+      const route=logisticsRoutes[index%logisticsRoutes.length],cargo=logisticsCargo[(index*3)%logisticsCargo.length];
+      const dateKey=day.toISOString().slice(0,10).replaceAll('-',''),reference=`NET-${dateKey}-${String(index+1).padStart(2,'0')}`;
+      const weight=Math.min(cargo[1]+(index%4)*350,24000);
+      await this.db.shipment.upsert({where:{reference},update:{},create:{reference,cargoName:cargo[0],weightKg:weight,originCity:route[0],destinationCity:route[1],distanceKm:route[2],rewardCents:BigInt(Math.round(route[2]*165+weight*4.5))}});
+    }
+  }
   products(){return this.db.product.findMany({orderBy:{name:'asc'}})}
   listings(){return this.db.marketListing.findMany({where:{status:'ACTIVE',quantity:{gt:0}},include:{product:true,seller:{select:{id:true,name:true}},warehouseStock:{include:{warehouse:true}}},orderBy:{unitPriceCents:'asc'}})}
   companies(userId:string){return this.db.company.findMany({where:{members:{some:{userId}}},include:companyView,orderBy:{createdAt:'asc'}})}
@@ -169,6 +183,7 @@ export class GameService {
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
   }
   async shipments(userId:string){
+    await this.ensureDailyTransportNetwork();
     const moving=await this.db.shipment.findMany({where:{carrier:{members:{some:{userId}}},status:{in:['ASSIGNED','IN_TRANSIT']},acceptedAt:{not:null},arrivesAt:{not:null}},include:{carrier:{include:{account:true}},vehicle:true}});
     const now=new Date();
     for(const shipment of moving){
@@ -183,6 +198,22 @@ export class GameService {
       }
     }
     return this.db.shipment.findMany({where:{OR:[{status:'OPEN'},{carrier:{members:{some:{userId}}}}]},include:{carrier:{select:{name:true}},vehicle:true},orderBy:[{status:'asc'},{rewardCents:'desc'}]});
+  }
+  async fleetNetwork(userId:string,companyId:string){
+    await this.ensureDailyTransportNetwork();
+    const company=await this.db.company.findFirst({where:{id:companyId,members:{some:{userId}}}});if(!company)throw new NotFoundException('Entreprise inaccessible');
+    const since=this.dayStart();
+    const [availableToday,deliveredToday,active,vehicles,routes]=await Promise.all([this.db.shipment.count({where:{createdAt:{gte:since}}}),this.db.shipment.count({where:{carrierId:companyId,status:'DELIVERED',deliveredAt:{gte:since}}}),this.db.shipment.count({where:{carrierId:companyId,status:{in:['ASSIGNED','IN_TRANSIT']}}}),this.db.vehicle.count({where:{companyId}}),this.db.shipment.findMany({where:{createdAt:{gte:since}},select:{originCity:true,destinationCity:true,status:true,carrierId:true}})]);
+    const hubs=[...new Set(routes.flatMap(route=>[route.originCity,route.destinationCity]))].map(city=>({city,departures:routes.filter(route=>route.originCity===city).length,arrivals:routes.filter(route=>route.destinationCity===city).length,active:routes.filter(route=>(route.originCity===city||route.destinationCity===city)&&route.carrierId===companyId&&route.status!=='DELIVERED'&&route.status!=='OPEN').length})).sort((a,b)=>b.departures+b.arrivals-a.departures-a.arrivals).slice(0,8);
+    return {dailyTarget:DAILY_TRANSPORT_TARGET,availableToday,deliveredToday,active,vehicles,hubs};
+  }
+  async autoDispatch(userId:string,dto:AutoDispatchDto){
+    await this.ensureDailyTransportNetwork();
+    const company=await this.db.company.findFirst({where:{id:dto.companyId,members:{some:{userId,role:{in:['OWNER','MANAGER']}}}}});if(!company)throw new NotFoundException('Entreprise inaccessible');
+    const vehicles=await this.db.vehicle.findMany({where:{companyId:dto.companyId,status:'AVAILABLE'},orderBy:[{capacityKg:'asc'},{condition:'desc'}],take:Math.min(dto.maxTransports,30)});
+    const missions=await this.db.shipment.findMany({where:{status:'OPEN'},orderBy:[{rewardCents:'desc'},{createdAt:'asc'}],take:100});let launched=0;
+    for(const vehicle of vehicles){const missionIndex=missions.findIndex(item=>vehicle.capacityKg.gte(item.weightKg));if(missionIndex<0)continue;const [mission]=missions.splice(missionIndex,1);try{await this.assignShipment(userId,mission.id,{companyId:dto.companyId,vehicleId:vehicle.id});launched++;}catch{}}
+    return {launched};
   }
   private async completeShipment(shipmentId:string,vehicleId:string,accountId:string,rewardCents:bigint,distanceKm:number,completedAt:Date){
     return this.db.$transaction(async tx=>{
@@ -266,6 +297,8 @@ export class GameController {
   @Post('vehicles/:id/maintenance') maintainVehicle(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.maintainVehicle(r.user.sub,id,d)}
   @Post('vehicle-market/:id/buy') buyUsedVehicle(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.buyUsedVehicle(r.user.sub,id,d)}
   @Get('shipments') shipments(@Req() r:AuthRequest){return this.game.shipments(r.user.sub)}
+  @Get('companies/:id/fleet-network') fleetNetwork(@Req() r:AuthRequest,@Param('id') id:string){return this.game.fleetNetwork(r.user.sub,id)}
+  @Post('fleet/auto-dispatch') autoDispatch(@Req() r:AuthRequest,@Body() d:AutoDispatchDto){return this.game.autoDispatch(r.user.sub,d)}
   @Post('shipments/:id/assign') assignShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:AssignShipmentDto){return this.game.assignShipment(r.user.sub,id,d)}
   @Post('shipments/:id/accelerate') accelerateShipment(@Req() r:AuthRequest,@Param('id') id:string,@Body() d:CompanyActionDto){return this.game.accelerateShipment(r.user.sub,id,d)}
 }

@@ -110,6 +110,14 @@ export type Shipment = {
   carrier?: { name: string };
   vehicle?: Vehicle;
 };
+type FleetNetwork = {
+  dailyTarget: number;
+  availableToday: number;
+  deliveredToday: number;
+  active: number;
+  vehicles: number;
+  hubs: { city: string; departures: number; arrivals: number; active: number }[];
+};
 const nav = [
   "Vue d’ensemble",
   "Marché mondial",
@@ -627,6 +635,12 @@ function Transport({
   const [now, setNow] = useState(Date.now());
   const [selling, setSelling] = useState<string | null>(null);
   const [salePrice, setSalePrice] = useState("");
+  const network = useQuery({
+    queryKey: ["fleet-network", company.id],
+    queryFn: () =>
+      api<FleetNetwork>(`/companies/${company.id}/fleet-network`),
+    refetchInterval: 5000,
+  });
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -637,6 +651,7 @@ function Transport({
       qc.invalidateQueries({ queryKey: ["vehicle-market"] }),
       qc.invalidateQueries({ queryKey: ["shipments"] }),
       qc.invalidateQueries({ queryKey: ["companies"] }),
+      qc.invalidateQueries({ queryKey: ["fleet-network", company.id] }),
     ]);
   const buy = useMutation({
     mutationFn: (modelId: string) =>
@@ -702,6 +717,14 @@ function Transport({
       }),
     onSuccess: refresh,
   });
+  const autoDispatch = useMutation({
+    mutationFn: () =>
+      api<{ launched: number }>("/fleet/auto-dispatch", {
+        method: "POST",
+        body: JSON.stringify({ companyId: company.id, maxTransports: 30 }),
+      }),
+    onSuccess: refresh,
+  });
   const available = vehicles.filter((v) => v.status === "AVAILABLE");
   const active = shipments.filter(
     (s) => s.carrier?.name === company.name && s.status !== "DELIVERED",
@@ -713,7 +736,8 @@ function Transport({
     accelerate.error ||
     listVehicle.error ||
     buyUsed.error ||
-    maintain.error;
+    maintain.error ||
+    autoDispatch.error;
   return (
     <section className="transportPage">
       <div className="fleetHeader">
@@ -727,6 +751,60 @@ function Transport({
         </div>
         <div className="gemWallet">◆ {company.gems} gemmes</div>
       </div>
+      <section className="fleetNetwork">
+        <div className="networkCommand">
+          <div>
+            <small>RÉSEAU LOGISTIQUE EUROPÉEN</small>
+            <h3>Tour de contrôle de la flotte</h3>
+            <p>
+              30 nouveaux transports minimum sont générés chaque jour sur le
+              réseau. Le dispatch automatique choisit le camion compatible le
+              plus rentable.
+            </p>
+          </div>
+          <button
+            disabled={autoDispatch.isPending || available.length === 0}
+            onClick={() => autoDispatch.mutate()}
+          >
+            {autoDispatch.isPending
+              ? "Planification…"
+              : `Lancer le dispatch · ${available.length} camion(s)`}
+          </button>
+        </div>
+        <div className="dailyObjective">
+          <div className="objectiveRing">
+            <strong>{network.data?.availableToday ?? 30}</strong>
+            <span>missions / jour</span>
+          </div>
+          <div className="objectiveCopy">
+            <small>OBJECTIF JOURNALIER</small>
+            <b>
+              {network.data?.deliveredToday ?? 0} livrée(s) · {network.data?.active ?? active.length} en route
+            </b>
+            <div className="dailyTrack">
+              <i
+                style={{
+                  width: `${Math.min(100, ((network.data?.deliveredToday ?? 0) / (network.data?.dailyTarget ?? 30)) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="hubGrid">
+          {(network.data?.hubs ?? []).map((hub, index) => (
+            <article key={hub.city}>
+              <span className={`hubPulse hub${index % 3}`} />
+              <div>
+                <b>{hub.city}</b>
+                <small>
+                  {hub.departures} départs · {hub.arrivals} arrivées
+                </small>
+              </div>
+              <em>{hub.active ? `${hub.active} actif` : "disponible"}</em>
+            </article>
+          ))}
+        </div>
+      </section>
       <div className="vehicleShop">
         {vehicleCatalog.map((v) => (
           <article className={`shopVehicle ${v.accent}`} key={v.id}>
